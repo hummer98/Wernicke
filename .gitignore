@@ -8,6 +8,7 @@ __pycache__/
 env/
 venv/
 ENV/
+whisperx-env/
 *.egg-info/
 
 # Build output
@@ -49,6 +50,8 @@ pip-log.txt
 # Project specific - continuous-audio-transcription
 ~/transcriptions/
 continuous-audio-transcription/config.json
+continuous-audio-transcription/whisperx-env/
+
 
 # Project specific - transcription-server
 transcription-server/.env

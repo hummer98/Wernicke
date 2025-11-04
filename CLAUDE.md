@@ -23,12 +23,18 @@ Kiro-style Spec Driven Development implementation using claude code slash comman
 ## Development Guidelines
 - Think in English, but generate responses in Japanese (思考は英語、回答の生成は日本語で行うように)
 
+### Windows環境セットアップ手順実行時
+- Git Bash環境でパス区切りは `/` を使用（`\` は不可）
+- 仮想環境のPythonは `whisperx-env/Scripts/python.exe` の形式
+- pip installの依存関係競合時、`--force-reinstall --no-deps` は避け、互換バージョンを確認
+
 ### リファレンス実装パターン
 
 状況に応じて詳細なリファレンスを参照してください。
 
 | タスク | リファレンス | トリガー |
 |--------|-------------|----------|
+| Windows CUDA環境構築 | [windows-python-cuda-setup](.kiro/steering/references/windows-python-cuda-setup.md) | Python+CUDA環境セットアップ時 |
 
 
 ## Workflow
