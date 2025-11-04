@@ -1,0 +1,29 @@
+# FastAPI and server dependencies
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# Testing dependencies
+pytest==7.4.4
+pytest-asyncio==0.23.3
+httpx==0.26.0
+
+# Type checking
+mypy==1.8.0
+types-requests==2.31.0.20240125
+
+# WhisperX and CUDA dependencies (install on CUDA server)
+# Note: These require CUDA 11.8+ and GPU
+# Uncomment when deploying to CUDA server:
+# torch==2.1.0+cu118
+# torchaudio==2.1.0+cu118
+# whisperx @ git+https://github.com/m-bain/whisperX.git
+# faster-whisper==0.10.0
+
+# Speaker diarization
+# pyannote.audio==3.1.1
+# pyannote.core==5.0.0
+
+# Audio processing
+# librosa==0.10.1
+# soundfile==0.12.1

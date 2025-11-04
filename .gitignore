@@ -1,0 +1,61 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Test coverage
+coverage/
+*.lcov
+.coverage
+htmlcov/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pip-log.txt
+
+# Temporary files
+/tmp/
+*.tmp
+*.temp
+
+# Project specific - continuous-audio-transcription
+~/transcriptions/
+continuous-audio-transcription/config.json
+
+# Project specific - transcription-server
+transcription-server/.env
+transcription-server/models/
+transcription-server/cuda-server/whisperx-env/
+
+# Cache files
+.channels_cache_v2.json
+.users_cache.json
+*.cache
