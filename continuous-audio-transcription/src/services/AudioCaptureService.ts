@@ -53,6 +53,7 @@ export class AudioCaptureService extends EventEmitter {
       channels: config.channels,
       format: config.format,
       tempDir: '/tmp/transcription-buffers',
+      enableVAD: true, // Enable voice activity detection
     });
   }
 

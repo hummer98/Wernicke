@@ -34,6 +34,7 @@ export class BufferManager {
   private bufferCapacity: number;
   private statistics: BufferStatistics;
   private vad?: VoiceActivityDetector;
+  private isFlushing: boolean = false;
 
   constructor(config: BufferManagerConfig) {
     this.config = config;
@@ -56,7 +57,7 @@ export class BufferManager {
       this.vad = new VoiceActivityDetector({
         sampleRate: config.sampleRate,
         channels: config.channels,
-        silenceThreshold: -40, // dB
+        silenceThreshold: -85, // dB (adjusted for low-volume BlackHole input)
         silenceDuration: 10, // seconds
         forceVoiceAfter: 300, // 5 minutes
       });
@@ -127,57 +128,68 @@ export class BufferManager {
    * Returns the file path, or null if buffer was skipped due to silence
    */
   public async flush(): Promise<string | null> {
+    // Prevent concurrent flush calls (race condition fix)
+    if (this.isFlushing) {
+      return null; // Already flushing, skip this call
+    }
+
     if (this.bufferSize === 0) {
       throw new Error('Buffer is empty');
     }
 
-    // Concatenate all buffer chunks
-    const audioData = Buffer.concat(this.buffer);
+    this.isFlushing = true; // Acquire lock
 
-    // Check for voice activity if VAD is enabled
-    if (this.vad !== undefined) {
-      const vadResult = this.vad.analyze(audioData);
+    try {
+      // Concatenate all buffer chunks
+      const audioData = Buffer.concat(this.buffer);
 
-      // Skip buffer if no voice detected
-      if (!vadResult.isVoiceDetected) {
-        console.log(
-          `[BufferManager] Skipping silent buffer (level: ${vadResult.averageLevel.toFixed(1)}dB, silence: ${vadResult.silenceDuration.toFixed(1)}s)`
-        );
+      // Check for voice activity if VAD is enabled
+      if (this.vad !== undefined) {
+        const vadResult = this.vad.analyze(audioData);
 
-        // Clear buffer and release memory
-        this.buffer = [];
-        this.bufferSize = 0;
-        this.statistics.bufferFillPercentage = 0;
-        if (this.statistics.skippedBuffers !== undefined) {
-          this.statistics.skippedBuffers++;
+        // Skip buffer if no voice detected
+        if (!vadResult.isVoiceDetected) {
+          console.log(
+            `[BufferManager] Skipping silent buffer (level: ${vadResult.averageLevel.toFixed(1)}dB, silence: ${vadResult.silenceDuration.toFixed(1)}s)`
+          );
+
+          // Clear buffer and release memory
+          this.buffer = [];
+          this.bufferSize = 0;
+          this.statistics.bufferFillPercentage = 0;
+          if (this.statistics.skippedBuffers !== undefined) {
+            this.statistics.skippedBuffers++;
+          }
+
+          return null; // Buffer skipped
         }
-
-        return null; // Buffer skipped
       }
+
+      // Generate filename with timestamp (HH-MM-SS-mmm.wav)
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const seconds = String(now.getSeconds()).padStart(2, '0');
+      const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
+      const filename = `${hours}-${minutes}-${seconds}-${milliseconds}.wav`;
+      const filePath = path.join(this.config.tempDir, filename);
+
+      // Create WAV file with header
+      const wavBuffer = this.createWavBuffer(audioData);
+
+      // Write to file
+      await fs.writeFile(filePath, wavBuffer);
+
+      // Clear buffer and release memory
+      this.buffer = [];
+      this.bufferSize = 0;
+      this.statistics.flushCount++;
+      this.statistics.bufferFillPercentage = 0;
+
+      return filePath;
+    } finally {
+      this.isFlushing = false; // Always release lock
     }
-
-    // Generate filename with timestamp (HH-MM-SS-mmm.wav)
-    const now = new Date();
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const seconds = String(now.getSeconds()).padStart(2, '0');
-    const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
-    const filename = `${hours}-${minutes}-${seconds}-${milliseconds}.wav`;
-    const filePath = path.join(this.config.tempDir, filename);
-
-    // Create WAV file with header
-    const wavBuffer = this.createWavBuffer(audioData);
-
-    // Write to file
-    await fs.writeFile(filePath, wavBuffer);
-
-    // Clear buffer and release memory
-    this.buffer = [];
-    this.bufferSize = 0;
-    this.statistics.flushCount++;
-    this.statistics.bufferFillPercentage = 0;
-
-    return filePath;
   }
 
   /**
