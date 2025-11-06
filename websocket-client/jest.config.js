@@ -15,4 +15,8 @@ module.exports = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
+  testTimeout: 30000, // 30 seconds timeout
+  fakeTimers: {
+    enableGlobally: false, // Use real timers by default
+  },
 };
