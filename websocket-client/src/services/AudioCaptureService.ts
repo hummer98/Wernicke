@@ -7,6 +7,7 @@ import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import { AudioCaptureError } from '../types/errors';
 import { BufferManager } from './BufferManager';
+import { logger } from './Logger';
 
 export interface AudioCaptureConfig {
   deviceName: string;
@@ -260,7 +261,11 @@ export class AudioCaptureService extends EventEmitter {
         `5. Try restarting the application or the system\n\n` +
         `If the problem persists, please contact support with the error logs.`;
 
-      console.error(errorMessage);
+      logger.error('FFmpeg maximum restart attempts reached', {
+        restartCount: this.statistics.restartCount,
+        maxRestarts: this.maxAutoRestarts,
+        deviceName: this.config.deviceName,
+      });
 
       const fatalError = new AudioCaptureError(errorMessage, {
         restartCount: this.statistics.restartCount,
@@ -272,17 +277,24 @@ export class AudioCaptureService extends EventEmitter {
       return;
     }
 
-    console.log(
-      `FFmpeg crashed, restarting in 10 seconds... (attempt ${this.statistics.restartCount}/${this.maxAutoRestarts})`
-    );
+    logger.warn('FFmpeg crashed, scheduling restart', {
+      delaySeconds: this.retryDelay / 1000,
+      attempt: this.statistics.restartCount,
+      maxRestarts: this.maxAutoRestarts,
+    });
 
     await new Promise((resolve) => setTimeout(resolve, this.retryDelay));
 
     try {
       await this.startFFmpeg();
-      console.log('FFmpeg restarted successfully');
+      logger.info('FFmpeg restarted successfully', {
+        attempt: this.statistics.restartCount,
+      });
     } catch (error) {
-      console.error(`Auto-restart attempt ${this.statistics.restartCount} failed:`, error);
+      logger.error('Auto-restart attempt failed', {
+        attempt: this.statistics.restartCount,
+        error: error instanceof Error ? error.message : String(error),
+      });
       this.emit('error', new AudioCaptureError(`Auto-restart failed: ${error}`));
     }
   }
