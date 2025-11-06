@@ -14,6 +14,7 @@ import {
   TranscriptionMessage,
   WebSocketStatistics,
 } from '../types/websocket';
+import { logger } from './Logger';
 
 /**
  * WebSocket Client for real-time transcription
@@ -25,6 +26,7 @@ export class WebSocketClient extends EventEmitter {
   private connectionState: ConnectionState = ConnectionState.DISCONNECTED;
   private reconnectAttempts: number = 0;
   private reconnectTimer: NodeJS.Timeout | null = null;
+  private permanentError: boolean = false; // Track permanent errors
   private statistics: WebSocketStatistics = {
     bytesSent: 0,
     reconnectCount: 0,
@@ -88,13 +90,32 @@ export class WebSocketClient extends EventEmitter {
           this.connectionState = ConnectionState.CONNECTED;
           this.reconnectAttempts = 0;
           this.emit('connected');
-          console.log(`WebSocket connected: ${this.config.serverUrl}`);
+          logger.info('WebSocket connected', { serverUrl: this.config.serverUrl });
           resolve();
         });
 
         // Connection error
         this.ws.on('error', (error: Error) => {
-          console.error('WebSocket error:', error);
+          // Check if this is a permanent error
+          if (this.isPermanentError(error)) {
+            this.permanentError = true;
+            logger.error('Permanent WebSocket error detected', {
+              error: error.message,
+              errorType: 'PERMANENT',
+              recommendation:
+                'Please check the server URL and ensure the WebSocket endpoint is correctly configured.',
+            });
+            this.emit('permanentError', error);
+
+            if (this.connectionState === ConnectionState.CONNECTING) {
+              this.connectionState = ConnectionState.DISCONNECTED;
+              reject(error);
+            }
+            return;
+          }
+
+          // Temporary error - log and continue
+          logger.error('WebSocket error', { error: error.message, stack: error.stack });
           this.emit('error', error);
 
           if (this.connectionState === ConnectionState.CONNECTING) {
@@ -105,7 +126,7 @@ export class WebSocketClient extends EventEmitter {
 
         // Connection closed
         this.ws.on('close', (code: number, reason: Buffer) => {
-          console.log(`WebSocket closed: code=${code}, reason=${reason.toString()}`);
+          logger.info('WebSocket closed', { code, reason: reason.toString() });
           this.handleDisconnect();
         });
 
@@ -142,8 +163,28 @@ export class WebSocketClient extends EventEmitter {
     if (this.connectionState !== ConnectionState.DISCONNECTED) {
       this.connectionState = ConnectionState.DISCONNECTED;
       this.emit('disconnected');
-      console.log('WebSocket disconnected');
+      logger.info('WebSocket disconnected');
     }
+  }
+
+  /**
+   * Check if error is permanent (4xx errors that won't resolve with retry)
+   * エラーが永続的かどうかをチェック（再試行しても解決しない4xxエラー）
+   */
+  private isPermanentError(error: Error): boolean {
+    const errorMessage = error.message;
+
+    // HTTP 4xx errors are permanent (client errors)
+    const permanentErrorPatterns = [
+      /unexpected server response: 400/i, // Bad Request
+      /unexpected server response: 401/i, // Unauthorized
+      /unexpected server response: 403/i, // Forbidden
+      /unexpected server response: 404/i, // Not Found
+      /unexpected server response: 405/i, // Method Not Allowed
+      /unexpected server response: 410/i, // Gone
+    ];
+
+    return permanentErrorPatterns.some((pattern) => pattern.test(errorMessage));
   }
 
   /**
@@ -156,6 +197,12 @@ export class WebSocketClient extends EventEmitter {
     const wasConnected = this.connectionState === ConnectionState.CONNECTED;
     this.connectionState = ConnectionState.DISCONNECTED;
     this.ws = null;
+
+    // Don't reconnect if permanent error occurred
+    if (this.permanentError) {
+      logger.warn('Permanent error detected, skipping reconnection');
+      return;
+    }
 
     if (wasConnected) {
       this.emit('disconnected');
@@ -184,7 +231,11 @@ export class WebSocketClient extends EventEmitter {
         `5. Try restarting the client application\n\n` +
         `If the problem persists, please contact support.`;
 
-      console.error(errorMessage);
+      logger.error('WebSocket reconnection failed', {
+        maxAttempts,
+        serverUrl: this.config.serverUrl,
+        troubleshooting: errorMessage,
+      });
       this.emit('reconnectFailed');
       return;
     }
@@ -194,9 +245,11 @@ export class WebSocketClient extends EventEmitter {
     const backoffMax = this.config.reconnectBackoffMax ?? 16000;
     const delay = Math.min(backoffBase * Math.pow(2, this.reconnectAttempts), backoffMax);
 
-    console.log(
-      `Scheduling reconnect attempt ${this.reconnectAttempts + 1}/${maxAttempts} in ${delay}ms`
-    );
+    logger.info('Scheduling reconnect', {
+      attempt: this.reconnectAttempts + 1,
+      maxAttempts,
+      delayMs: delay,
+    });
 
     this.reconnectTimer = setTimeout(async () => {
       this.reconnectAttempts++;
@@ -205,10 +258,16 @@ export class WebSocketClient extends EventEmitter {
 
       try {
         await this.connect();
-        console.log('Reconnected successfully');
+        logger.info('Reconnected successfully', {
+          attempt: this.reconnectAttempts,
+          serverUrl: this.config.serverUrl,
+        });
         this.emit('reconnected');
       } catch (error) {
-        console.error('Reconnect failed:', error);
+        logger.warn('Reconnect attempt failed', {
+          attempt: this.reconnectAttempts,
+          error: error instanceof Error ? error.message : String(error),
+        });
         // scheduleReconnect will be called again by handleDisconnect
       }
     }, delay);
@@ -232,8 +291,11 @@ export class WebSocketClient extends EventEmitter {
       }
 
       this.ws.send(chunk, (error) => {
-        if (error !== undefined) {
-          console.error('Failed to send audio chunk:', error);
+        if (error !== undefined && error !== null) {
+          logger.error('Failed to send audio chunk', {
+            error: error.message,
+            chunkSize: chunk.length,
+          });
           reject(error);
         } else {
           this.statistics.bytesSent += chunk.length;
@@ -257,7 +319,7 @@ export class WebSocketClient extends EventEmitter {
       // Emit event based on message type
       switch (message.type) {
         case 'connection_established':
-          console.log('Connection established:', message.session_id);
+          logger.info('Connection established', { sessionId: message.session_id });
           this.emit('connectionEstablished', message);
           break;
 
@@ -267,25 +329,35 @@ export class WebSocketClient extends EventEmitter {
           break;
 
         case 'partial':
-          console.log('Partial result received:', message.buffer_id);
+          logger.info('Partial result received', { bufferId: message.buffer_id });
           this.emit('partialResult', message);
           break;
 
         case 'final':
-          console.log('Final result received:', message.buffer_id);
+          logger.info('Final result received', { bufferId: message.buffer_id });
           this.emit('finalResult', message);
           break;
 
         case 'error':
-          console.error('Server error:', message.message);
+          logger.error('Server error', {
+            code: message.code,
+            message: message.message,
+            timestamp: message.timestamp,
+          });
           this.emit('serverError', message);
           break;
 
         default:
-          console.warn('Unknown message type:', message);
+          logger.warn('Unknown message type', {
+            messageType: (message as { type?: string }).type,
+            message: JSON.stringify(message).substring(0, 200)
+          });
       }
     } catch (error) {
-      console.error('Failed to parse message:', error);
+      logger.error('Failed to parse message', {
+        error: error instanceof Error ? error.message : String(error),
+        data: data.toString().substring(0, 200), // Log first 200 chars
+      });
       this.emit('error', error);
     }
   }

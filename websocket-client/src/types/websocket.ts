@@ -102,8 +102,9 @@ export interface FinalResultMessage {
  */
 export interface ErrorMessage {
   type: 'error';
-  code: number;
+  code?: string;
   message: string;
+  timestamp?: string;
 }
 
 /**
