@@ -9,6 +9,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { PartialResultMessage, FinalResultMessage } from '../types/websocket';
+import { logger } from './Logger';
 
 /**
  * Transcription Display Configuration
@@ -112,7 +113,11 @@ export class TranscriptionDisplay {
     this.statistics.partialResultsDisplayed++;
     this.statistics.totalPartialLatencyMs += result.latency_ms;
 
-    console.log(`[Partial] ${result.buffer_id}: ${result.text} (latency: ${result.latency_ms}ms)`);
+    logger.info('Partial result displayed', {
+      bufferId: result.buffer_id,
+      text: result.text.substring(0, 50), // Log first 50 chars
+      latencyMs: result.latency_ms,
+    });
   }
 
   /**
@@ -142,7 +147,11 @@ export class TranscriptionDisplay {
     this.statistics.finalResultsDisplayed++;
     this.statistics.totalFinalLatencyMs += result.latency_ms;
 
-    console.log(`[Final] ${result.buffer_id}: ${result.text} (latency: ${result.latency_ms}ms)`);
+    logger.info('Final result displayed', {
+      bufferId: result.buffer_id,
+      text: result.text.substring(0, 50), // Log first 50 chars
+      latencyMs: result.latency_ms,
+    });
   }
 
   /**

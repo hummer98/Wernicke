@@ -11,6 +11,7 @@ import { WebSocketClient } from './WebSocketClient';
 import { AudioCaptureService, AudioCaptureConfig } from './AudioCaptureService';
 import { VoiceActivityDetector, VADConfig } from './VoiceActivityDetector';
 import { WebSocketConfig, PartialResultMessage, FinalResultMessage } from '../types/websocket';
+import { logger } from './Logger';
 
 /**
  * Transcription Client Configuration
@@ -57,28 +58,33 @@ export class TranscriptionClient extends EventEmitter {
   private setupEventHandlers(): void {
     // WebSocket events
     this.wsClient.on('connected', () => {
-      console.log('WebSocket connected');
+      logger.info('WebSocket connected');
       this.emit('wsConnected');
     });
 
     this.wsClient.on('disconnected', () => {
-      console.log('WebSocket disconnected');
+      logger.info('WebSocket disconnected');
       this.emit('wsDisconnected');
     });
 
     this.wsClient.on('partialResult', (result: PartialResultMessage) => {
-      console.log('Partial result received:', result.text);
+      logger.info('Partial result received', { text: result.text.substring(0, 50) });
       this.emit('partialResult', result);
     });
 
     this.wsClient.on('finalResult', (result: FinalResultMessage) => {
-      console.log('Final result received:', result.text);
+      logger.info('Final result received', { text: result.text.substring(0, 50) });
       this.emit('finalResult', result);
     });
 
     this.wsClient.on('error', (error: Error) => {
-      console.error('WebSocket error:', error);
+      logger.error('WebSocket error', { error: error.message });
       this.emit('error', error);
+    });
+
+    this.wsClient.on('permanentError', (error: Error) => {
+      logger.error('Permanent WebSocket error', { error: error.message });
+      this.emit('permanentError', error);
     });
 
     // Audio Capture events
@@ -87,7 +93,7 @@ export class TranscriptionClient extends EventEmitter {
     });
 
     this.audioCaptureService.on('error', (error: Error) => {
-      console.error('Audio capture error:', error);
+      logger.error('Audio capture error', { error: error.message });
       this.emit('error', error);
     });
   }
@@ -122,7 +128,9 @@ export class TranscriptionClient extends EventEmitter {
         });
       }
     } catch (error) {
-      console.error('Failed to handle audio chunk:', error);
+      logger.error('Failed to handle audio chunk', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       this.emit('error', error);
     }
   }
@@ -136,22 +144,24 @@ export class TranscriptionClient extends EventEmitter {
       throw new Error('Transcription client is already running');
     }
 
-    console.log('Starting transcription client...');
+    logger.info('Starting transcription client...');
 
     try {
       // Start WebSocket connection
       await this.wsClient.connect();
-      console.log('WebSocket connected');
+      logger.info('WebSocket connected');
 
       // Start audio capture
       await this.audioCaptureService.start();
-      console.log('Audio capture started');
+      logger.info('Audio capture started');
 
       this.running = true;
       this.emit('started');
-      console.log('Transcription client started');
+      logger.info('Transcription client started');
     } catch (error) {
-      console.error('Failed to start transcription client:', error);
+      logger.error('Failed to start transcription client', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       await this.stop();
       throw error;
     }
@@ -166,19 +176,19 @@ export class TranscriptionClient extends EventEmitter {
       return;
     }
 
-    console.log('Stopping transcription client...');
+    logger.info('Stopping transcription client...');
 
     // Stop audio capture
     await this.audioCaptureService.stop();
-    console.log('Audio capture stopped');
+    logger.info('Audio capture stopped');
 
     // Disconnect WebSocket
     await this.wsClient.disconnect();
-    console.log('WebSocket disconnected');
+    logger.info('WebSocket disconnected');
 
     this.running = false;
     this.emit('stopped');
-    console.log('Transcription client stopped');
+    logger.info('Transcription client stopped');
   }
 
   /**
