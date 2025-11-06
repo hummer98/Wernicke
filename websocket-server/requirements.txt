@@ -15,6 +15,7 @@ torchaudio>=2.9.0
 transformers>=4.40.0  # Whisperモデル用
 accelerate>=0.20.0  # モデルロード用
 numpy>=1.24.3
+silero-vad>=6.2.0  # Voice Activity Detection (幻聴対策)
 
 # テスト
 pytest>=7.4.3

@@ -13,6 +13,7 @@ import numpy as np
 import logging
 import time
 from typing import Dict, Any, Optional, List
+from silero_vad import load_silero_vad, get_speech_timestamps
 
 # Logging configuration
 logging.basicConfig(level=logging.INFO)
@@ -63,7 +64,7 @@ class GPUPipeline:
     
     def _load_models(self):
         """
-        Load AI models (Whisper, Wav2Vec2, pyannote)
+        Load AI models (Whisper, Silero-VAD, Wav2Vec2, pyannote)
 
         This is called once during initialization.
         Models are loaded lazily to avoid unnecessary memory usage.
@@ -72,6 +73,9 @@ class GPUPipeline:
 
         # Load Whisper model
         self._load_whisper_model()
+
+        # Load Silero-VAD model for hallucination prevention
+        self._load_vad_model()
 
         # Future: Load Wav2Vec2, pyannote
 
@@ -151,7 +155,24 @@ class GPUPipeline:
             logger.error("Server startup aborted due to critical model loading failure")
             logger.error("=" * 60)
             raise
-    
+
+    def _load_vad_model(self):
+        """
+        Load Silero-VAD model for voice activity detection
+
+        Purpose: Detect speech segments to prevent hallucinations on silence/noise
+        """
+        logger.info("Loading Silero-VAD model...")
+
+        try:
+            # Load Silero-VAD model (supports 8kHz and 16kHz)
+            self.vad_model = load_silero_vad()
+            logger.info("Silero-VAD model loaded successfully")
+        except Exception as e:
+            logger.error(f"Failed to load Silero-VAD model: {str(e)}", exc_info=True)
+            logger.warning("VAD will be disabled, hallucinations may occur on silence/noise")
+            self.vad_model = None
+
     def get_vram_usage(self) -> Dict[str, float]:
         """
         Get current VRAM usage
@@ -205,6 +226,53 @@ class GPUPipeline:
                 'message': str(error)
             }
     
+    def _detect_speech_segments(self, audio_np: np.ndarray) -> bool:
+        """
+        Detect if audio contains speech using Silero-VAD
+
+        Args:
+            audio_np: Audio numpy array (16kHz mono float32)
+
+        Returns:
+            True if speech detected, False otherwise
+        """
+        if self.vad_model is None:
+            # VAD disabled, assume speech present
+            return True
+
+        try:
+            # Convert numpy to torch tensor for VAD
+            audio_tensor = torch.from_numpy(audio_np)
+
+            # Get speech timestamps (returns list of {'start': int, 'end': int})
+            speech_timestamps = get_speech_timestamps(
+                audio_tensor,
+                self.vad_model,
+                threshold=0.5,  # Confidence threshold (0.0-1.0)
+                sampling_rate=16000,
+                min_speech_duration_ms=250,  # Minimum speech segment
+                min_silence_duration_ms=100,  # Minimum silence between segments
+                return_seconds=False
+            )
+
+            has_speech = len(speech_timestamps) > 0
+
+            if has_speech:
+                total_speech_duration = sum(
+                    (seg['end'] - seg['start']) / 16000.0
+                    for seg in speech_timestamps
+                )
+                logger.info(f"VAD: Speech detected ({len(speech_timestamps)} segments, {total_speech_duration:.2f}s total)")
+            else:
+                logger.info("VAD: No speech detected (silence/noise only)")
+
+            return has_speech
+
+        except Exception as e:
+            logger.error(f"VAD error: {str(e)}", exc_info=True)
+            # On error, assume speech present to avoid skipping valid audio
+            return True
+
     async def transcribe_audio(
         self,
         audio_data: bytes,
@@ -214,10 +282,10 @@ class GPUPipeline:
         Transcribe audio buffer using transformers Whisper
 
         Task 3.2: Whisper Audio Recognition Integration
-        更新: transformersライブラリ使用
+        更新: transformersライブラリ使用 + Silero-VAD前処理
 
         Args:
-            audio_data: Raw audio bytes (48kHz, stereo, float32)
+            audio_data: Raw audio bytes (16kHz, mono, float32)
             buffer_start_time: Buffer start timestamp (for relative timestamps)
 
         Returns:
@@ -229,6 +297,18 @@ class GPUPipeline:
             audio_np = np.frombuffer(audio_data, dtype=np.float32)
 
             logger.info(f"Transcribing audio: {len(audio_np)} samples at 16kHz")
+
+            # Silero-VAD: Check if audio contains speech
+            has_speech = self._detect_speech_segments(audio_np)
+
+            if not has_speech:
+                # No speech detected - return empty result (prevent hallucinations)
+                logger.info("Skipping transcription: No speech detected by VAD")
+                return {
+                    'text': '',
+                    'segments': [],
+                    'vad_skipped': True
+                }
 
             # Prepare input for Whisper (already in correct format: 16kHz mono)
             input_features = self.whisper_processor(
