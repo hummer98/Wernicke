@@ -1,0 +1,566 @@
+"""
+GPU Processing Pipeline
+Task 3.1: GPUPipeline Class Setup
+Task 3.2: Whisper Audio Recognition Integration
+Task 4.1: Partial Results Processing Pipeline
+Requirements: R4.1, R7.1, R7.3, R3.3, R3.1, R5.1, R8.1
+更新: transformersライブラリ使用 (Python 3.14互換)
+"""
+
+import torch
+from transformers import WhisperProcessor, WhisperForConditionalGeneration
+import numpy as np
+import logging
+import time
+from typing import Dict, Any, Optional, List
+
+# Logging configuration
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+class GPUPipeline:
+    """
+    GPU Processing Pipeline for audio transcription
+    
+    Manages:
+    - GPU device initialization
+    - Model loading (Whisper, Wav2Vec2, pyannote)
+    - VRAM monitoring
+    - Error handling for GPU operations
+    """
+    
+    def __init__(self):
+        """
+        Initialize GPU Pipeline
+        
+        Raises:
+            RuntimeError: If CUDA is not available or model loading fails
+        """
+        # Check CUDA availability
+        if not torch.cuda.is_available():
+            raise RuntimeError(
+                "CUDA is not available. This system requires a CUDA-capable GPU. "
+                "Please ensure CUDA is installed and a compatible GPU is present."
+            )
+        
+        self.device = 'cuda'
+        
+        # Log GPU device information
+        gpu_name = torch.cuda.get_device_name(0)
+        logger.info(f"GPU Pipeline initialized: {gpu_name}")
+        
+        # Load models
+        try:
+            self._load_models()
+            logger.info("All models loaded successfully")
+        except Exception as e:
+            logger.error(f"Model loading failed: {str(e)}", exc_info=True)
+            raise RuntimeError(f"Model loading failed: {str(e)}") from e
+        
+        # Log initial VRAM usage
+        self.log_vram_usage()
+    
+    def _load_models(self):
+        """
+        Load AI models (Whisper, Wav2Vec2, pyannote)
+
+        This is called once during initialization.
+        Models are loaded lazily to avoid unnecessary memory usage.
+        """
+        logger.info("Loading models...")
+
+        # Load Whisper model
+        self._load_whisper_model()
+
+        # Future: Load Wav2Vec2, pyannote
+
+        torch.cuda.empty_cache()
+        logger.info("Model loading complete")
+
+    def _load_whisper_model(self):
+        """
+        Load Whisper large-v3 model using transformers
+
+        Task 3.2: Whisper Audio Recognition Integration
+        Task 12.2: Enhanced model loading error handling with troubleshooting guidance
+        更新: transformersライブラリ使用 (Python 3.14互換)
+        """
+        logger.info("Loading Whisper large-v3 model using transformers...")
+
+        try:
+            model_name = "openai/whisper-large-v3"
+            
+            # Load processor and model
+            self.whisper_processor = WhisperProcessor.from_pretrained(model_name)
+            self.whisper_model = WhisperForConditionalGeneration.from_pretrained(
+                model_name,
+                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                device_map=self.device
+            )
+            
+            # Set language and task tokens
+            self.whisper_processor.tokenizer.set_prefix_tokens(language="ja", task="transcribe")
+            
+            logger.info("Whisper large-v3 model loaded successfully using transformers")
+        except Exception as e:
+            # Task 12.2: Detailed error logging with troubleshooting guidance
+            logger.error(f"Failed to load Whisper model: {str(e)}", exc_info=True)
+            logger.error("=" * 60)
+            logger.error("MODEL LOADING ERROR - Troubleshooting Guide:")
+            logger.error("=" * 60)
+
+            error_msg = str(e).lower()
+
+            # Provide context-specific guidance
+            if "out of memory" in error_msg or "oom" in error_msg:
+                logger.error("CAUSE: Insufficient GPU memory (VRAM)")
+                logger.error("SOLUTIONS:")
+                logger.error("  1. Close other GPU-intensive applications")
+                logger.error("  2. Reduce model size (use 'base' or 'medium' instead of 'large-v3')")
+                logger.error("  3. Upgrade to GPU with more VRAM (current model needs ~3GB)")
+            elif "cuda" in error_msg:
+                logger.error("CAUSE: CUDA initialization or compatibility issue")
+                logger.error("SOLUTIONS:")
+                logger.error("  1. Verify CUDA toolkit is installed (nvidia-smi)")
+                logger.error("  2. Check PyTorch CUDA compatibility: torch.cuda.is_available()")
+                logger.error("  3. Reinstall PyTorch with matching CUDA version")
+                logger.error("  4. Update NVIDIA drivers to latest version")
+            elif "connection" in error_msg or "network" in error_msg or "timeout" in error_msg:
+                logger.error("CAUSE: Network connection issue downloading model")
+                logger.error("SOLUTIONS:")
+                logger.error("  1. Check internet connection")
+                logger.error("  2. Retry after a few minutes")
+                logger.error("  3. Download model manually from Hugging Face")
+                logger.error("  4. Check firewall/proxy settings")
+            elif "permission" in error_msg or "access" in error_msg:
+                logger.error("CAUSE: File system permission issue")
+                logger.error("SOLUTIONS:")
+                logger.error("  1. Check write permissions in ~/.cache/huggingface/")
+                logger.error("  2. Run with appropriate user permissions")
+                logger.error("  3. Verify disk space availability")
+            else:
+                logger.error("CAUSE: Unknown error")
+                logger.error("SOLUTIONS:")
+                logger.error("  1. Check error message above for details")
+                logger.error("  2. Verify transformers package installation: pip list | grep transformers")
+                logger.error("  3. Try reinstalling: pip install --upgrade --force-reinstall transformers")
+                logger.error("  4. Check Python version compatibility (Python 3.8-3.14 supported)")
+
+            logger.error("=" * 60)
+            logger.error("Server startup aborted due to critical model loading failure")
+            logger.error("=" * 60)
+            raise
+    
+    def get_vram_usage(self) -> Dict[str, float]:
+        """
+        Get current VRAM usage
+        
+        Returns:
+            Dict with 'allocated_gb' and 'max_allocated_gb' keys
+        """
+        allocated = torch.cuda.memory_allocated(0) / (1024 ** 3)  # Convert to GB
+        max_allocated = torch.cuda.max_memory_allocated(0) / (1024 ** 3)
+        
+        return {
+            'allocated_gb': allocated,
+            'max_allocated_gb': max_allocated
+        }
+    
+    def log_vram_usage(self):
+        """Log current VRAM usage"""
+        vram_info = self.get_vram_usage()
+        logger.info(
+            f"VRAM Usage: {vram_info['allocated_gb']:.2f} GB allocated, "
+            f"{vram_info['max_allocated_gb']:.2f} GB max allocated"
+        )
+    
+    def handle_gpu_error(self, error: Exception) -> Dict[str, Any]:
+        """
+        Handle GPU errors (especially OOM)
+        
+        Args:
+            error: The exception that occurred
+            
+        Returns:
+            Dict with error information
+        """
+        if isinstance(error, torch.cuda.OutOfMemoryError):
+            logger.error("GPU Out of Memory error occurred", exc_info=True)
+            
+            # Clear GPU cache
+            torch.cuda.empty_cache()
+            logger.info("GPU cache cleared")
+            
+            return {
+                'error': True,
+                'error_type': 'GPU_OOM',
+                'message': 'GPU Out of Memory. Buffer will be skipped.'
+            }
+        else:
+            logger.error(f"GPU error: {str(error)}", exc_info=True)
+            return {
+                'error': True,
+                'error_type': 'GPU_ERROR',
+                'message': str(error)
+            }
+    
+    async def transcribe_audio(
+        self,
+        audio_data: bytes,
+        buffer_start_time: float
+    ) -> Dict[str, Any]:
+        """
+        Transcribe audio buffer using transformers Whisper
+
+        Task 3.2: Whisper Audio Recognition Integration
+        更新: transformersライブラリ使用
+
+        Args:
+            audio_data: Raw audio bytes (48kHz, stereo, float32)
+            buffer_start_time: Buffer start timestamp (for relative timestamps)
+
+        Returns:
+            Dict with 'text', 'segments' (with relative timestamps), or 'error'
+        """
+        try:
+            # Convert bytes to numpy array
+            # Format: 48kHz, 2 channels, float32 (4 bytes per sample)
+            audio_np = np.frombuffer(audio_data, dtype=np.float32)
+
+            # Reshape to (samples, channels) if stereo
+            # Whisper expects mono, so we'll convert stereo to mono by averaging
+            audio_np = audio_np.reshape(-1, 2)
+            audio_mono = audio_np.mean(axis=1)  # Average left and right channels
+
+            logger.info(f"Transcribing audio: {len(audio_mono)} samples")
+
+            # Prepare input for Whisper
+            # Whisper expects 16kHz audio, so we need to resample
+            # For now, we'll use the original sample rate and let Whisper handle it
+            input_features = self.whisper_processor(
+                audio_mono.astype(np.float32),
+                sampling_rate=48000,  # Our sample rate
+                return_tensors="pt"
+            ).input_features.to(self.device)
+
+            # Generate transcription
+            predicted_ids = self.whisper_model.generate(
+                input_features,
+                language="ja",
+                task="transcribe",
+                return_timestamps=True
+            )
+
+            # Decode transcription
+            transcription = self.whisper_processor.batch_decode(
+                predicted_ids,
+                skip_special_tokens=True,
+                output_offsets=True
+            )[0]
+
+            # Extract text and segments
+            text = transcription.text
+            segments = []
+
+            # Convert timestamp tokens to segments
+            # Note: transformers Whisper doesn't provide detailed timestamps by default
+            # For now, we'll create a single segment with the full text
+            # Future: Implement proper timestamp extraction
+            if text.strip():
+                segments = [{
+                    'start': 0.0,
+                    'end': len(audio_mono) / 48000.0,  # Approximate duration
+                    'text': text
+                }]
+
+            logger.info(f"Transcription complete: {len(segments)} segments, text_length={len(text)}")
+
+            return {
+                'text': text,
+                'segments': segments
+            }
+
+        except torch.cuda.OutOfMemoryError as e:
+            # Task 12.1: GPU OOM error handling
+            logger.error("GPU Out of Memory during transcription", exc_info=True)
+            error_info = self.handle_gpu_error(e)
+            return error_info
+        except Exception as e:
+            logger.error(f"Transcription error: {str(e)}", exc_info=True)
+            return {
+                'error': True,
+                'message': str(e)
+            }
+
+    async def process_partial(
+        self,
+        audio_data: bytes,
+        buffer_id: str,
+        buffer_start_time: float
+    ) -> Dict[str, Any]:
+        """
+        Process partial results (Whisper only, no alignment/diarization/LLM)
+
+        Task 4.1: Partial Results Processing Pipeline
+
+        Args:
+            audio_data: Raw audio bytes (48kHz, stereo, float32)
+            buffer_id: Buffer identifier (e.g., buff_20250105_120000_001)
+            buffer_start_time: Buffer start timestamp
+
+        Returns:
+            Dict with type="partial", buffer_id, timestamp_range, segments, latency_ms
+        """
+        start_time = time.time()
+
+        try:
+            # Run Whisper transcription only
+            whisper_result = await self.transcribe_audio(audio_data, buffer_start_time)
+
+            if 'error' in whisper_result:
+                return whisper_result
+
+            # Extract segments
+            segments = whisper_result.get('segments', [])
+            text = whisper_result.get('text', '')
+
+            # Calculate timestamp range
+            if segments:
+                timestamp_range = {
+                    'start': min(seg['start'] for seg in segments),
+                    'end': max(seg['end'] for seg in segments)
+                }
+            else:
+                timestamp_range = {
+                    'start': 0.0,
+                    'end': 0.0
+                }
+
+            # Calculate latency
+            latency_ms = (time.time() - start_time) * 1000
+
+            logger.info(f"Partial result generated: buffer_id={buffer_id}, latency={latency_ms:.1f}ms")
+
+            return {
+                'type': 'partial',
+                'buffer_id': buffer_id,
+                'text': text,
+                'segments': segments,
+                'timestamp_range': timestamp_range,
+                'latency_ms': latency_ms
+            }
+
+        except Exception as e:
+            logger.error(f"Partial processing error: {str(e)}", exc_info=True)
+            return {
+                'error': True,
+                'message': str(e)
+            }
+
+    def cleanup(self):
+        """
+        Cleanup GPU resources
+
+        Clears GPU cache to free memory.
+        """
+        torch.cuda.empty_cache()
+        logger.info("GPU pipeline cleanup complete")
+    # Task 5.1: Wav2Vec2 Alignment (Stub)
+    async def apply_alignment(self, segments: List[Dict[str, Any]], audio_data: bytes) -> List[Dict[str, Any]]:
+        """
+        Apply Wav2Vec2 alignment to Whisper segments (Stub implementation)
+        
+        Task 5.1: Wav2Vec2 Alignment Integration
+        
+        Args:
+            segments: Whisper transcription segments
+            audio_data: Raw audio bytes
+            
+        Returns:
+            Aligned segments with improved word-level timestamps
+        """
+        logger.info("Wav2Vec2 alignment (stub): returning original segments")
+        # Stub: Return segments unchanged
+        # Future: Implement WhisperX integration for word-level alignment
+        return segments
+    
+    # Task 6.1-6.2: Speaker Diarization (Stub)
+    async def apply_diarization(
+        self,
+        segments: List[Dict[str, Any]],
+        audio_data: bytes
+    ) -> List[Dict[str, Any]]:
+        """
+        Apply speaker diarization to segments (Stub implementation)
+        
+        Task 6.1-6.2: pyannote.audio Speaker Diarization Integration
+        
+        Args:
+            segments: Transcription segments
+            audio_data: Raw audio bytes
+            
+        Returns:
+            Segments with speaker labels (Speaker_00, Speaker_01, etc.)
+        """
+        logger.info("Speaker diarization (stub): assigning default speaker")
+        # Stub: Assign default speaker to all segments
+        # Future: Implement pyannote.audio for actual speaker diarization
+        for seg in segments:
+            seg['speaker'] = 'Speaker_00'
+        return segments
+    
+    # Task 7.1-7.3: LLM Correction (Stub)
+    async def apply_llm_correction(self, text: str, segments: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Apply LLM correction to transcription (Stub implementation)
+
+        Task 7.1-7.3: Ollama/Qwen2.5-14B LLM Correction
+        Task 12.3: Ollama connection error handling with graceful degradation
+
+        Args:
+            text: Original transcription text
+            segments: Transcription segments
+
+        Returns:
+            Dict with 'corrected_text' and 'corrected_segments'
+        """
+        try:
+            logger.info("LLM correction (stub): returning original text")
+            # Stub: Return original text without correction
+            # Future: Implement Ollama integration with Qwen2.5-14B
+            #   - Fix homophone errors (きかい → 機械/機会)
+            #   - Remove fillers (えー、あの)
+            #   - Add proper punctuation
+
+            # Future Ollama integration would be here:
+            # try:
+            #     response = requests.post(
+            #         "http://localhost:11434/api/generate",
+            #         json={"model": "qwen2.5:14b", "prompt": f"Correct: {text}"},
+            #         timeout=10
+            #     )
+            #     ...
+            # except (ConnectionError, requests.exceptions.RequestException) as e:
+            #     # Falls through to graceful degradation below
+
+            corrected_segments = []
+            for seg in segments:
+                corrected_seg = seg.copy()
+                corrected_seg['corrected'] = False  # No actual correction applied
+                corrected_segments.append(corrected_seg)
+
+            return {
+                'corrected_text': text,
+                'corrected_segments': corrected_segments
+            }
+
+        except (ConnectionError, OSError) as e:
+            # Task 12.3: Graceful degradation when Ollama is unavailable
+            logger.warning(f"Ollama connection failed: {str(e)}")
+            logger.warning("Skipping LLM correction, returning partial Whisper results only")
+            logger.warning("LLM correction will automatically resume when Ollama becomes available")
+
+            # Return uncorrected segments
+            uncorrected_segments = []
+            for seg in segments:
+                uncorrected_seg = seg.copy()
+                uncorrected_seg['corrected'] = False
+                uncorrected_segments.append(uncorrected_seg)
+
+            return {
+                'corrected_text': text,
+                'corrected_segments': uncorrected_segments
+            }
+
+        except Exception as e:
+            # Other errors: log but still return original text
+            logger.error(f"LLM correction error: {str(e)}", exc_info=True)
+
+            uncorrected_segments = []
+            for seg in segments:
+                uncorrected_seg = seg.copy()
+                uncorrected_seg['corrected'] = False
+                uncorrected_segments.append(uncorrected_seg)
+
+            return {
+                'corrected_text': text,
+                'corrected_segments': uncorrected_segments
+            }
+    
+    # Task 8.1: Final Results Processing Pipeline
+    async def process_final(
+        self,
+        audio_data: bytes,
+        buffer_id: str,
+        buffer_start_time: float
+    ) -> Dict[str, Any]:
+        """
+        Process final results with full pipeline: Whisper → Alignment → Diarization → LLM
+        
+        Task 8.1: Final Results Processing Pipeline
+        
+        Args:
+            audio_data: Raw audio bytes (48kHz, stereo, float32)
+            buffer_id: Buffer identifier
+            buffer_start_time: Buffer start timestamp
+            
+        Returns:
+            Dict with type="final", buffer_id, timestamp_range, corrected segments
+        """
+        start_time = time.time()
+        
+        try:
+            # Step 1: Whisper transcription
+            logger.info(f"Final processing started: buffer_id={buffer_id}")
+            whisper_result = await self.transcribe_audio(audio_data, buffer_start_time)
+            
+            if 'error' in whisper_result:
+                return whisper_result
+            
+            segments = whisper_result.get('segments', [])
+            text = whisper_result.get('text', '')
+            
+            # Step 2: Wav2Vec2 alignment (stub)
+            segments = await self.apply_alignment(segments, audio_data)
+            
+            # Step 3: Speaker diarization (stub)
+            segments = await self.apply_diarization(segments, audio_data)
+            
+            # Step 4: LLM correction (stub)
+            llm_result = await self.apply_llm_correction(text, segments)
+            corrected_text = llm_result['corrected_text']
+            corrected_segments = llm_result['corrected_segments']
+            
+            # Calculate timestamp range
+            if corrected_segments:
+                timestamp_range = {
+                    'start': min(seg['start'] for seg in corrected_segments),
+                    'end': max(seg['end'] for seg in corrected_segments)
+                }
+            else:
+                timestamp_range = {
+                    'start': 0.0,
+                    'end': 0.0
+                }
+            
+            # Calculate latency
+            latency_ms = (time.time() - start_time) * 1000
+            
+            logger.info(f"Final result generated: buffer_id={buffer_id}, latency={latency_ms:.1f}ms")
+            
+            return {
+                'type': 'final',
+                'buffer_id': buffer_id,
+                'text': corrected_text,
+                'segments': corrected_segments,
+                'timestamp_range': timestamp_range,
+                'latency_ms': latency_ms
+            }
+        
+        except Exception as e:
+            logger.error(f"Final processing error: {str(e)}", exc_info=True)
+            return {
+                'error': True,
+                'message': str(e)
+            }
