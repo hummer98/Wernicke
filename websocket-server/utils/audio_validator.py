@@ -9,13 +9,14 @@ from typing import Dict, Any, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-# Audio format constants (48kHz, stereo, float32)
-EXPECTED_SAMPLE_RATE = 48000
-EXPECTED_CHANNELS = 2
+# Audio format constants (16kHz, mono, float32)
+# Changed from 48kHz stereo to 16kHz mono for Whisper/Silero-VAD optimization (83% bandwidth reduction)
+EXPECTED_SAMPLE_RATE = 16000
+EXPECTED_CHANNELS = 1
 EXPECTED_BYTES_PER_SAMPLE = 4  # float32 = 4 bytes
-EXPECTED_FRAME_SIZE = EXPECTED_CHANNELS * EXPECTED_BYTES_PER_SAMPLE  # 8 bytes per frame
+EXPECTED_FRAME_SIZE = EXPECTED_CHANNELS * EXPECTED_BYTES_PER_SAMPLE  # 4 bytes per frame
 
-# Maximum payload size: 30 seconds = 30 * 48000 * 2 * 4 = 11,520,000 bytes
+# Maximum payload size: 30 seconds = 30 * 16000 * 1 * 4 = 1,920,000 bytes (was 11.52MB)
 MAX_DURATION_SECONDS = 30
 MAX_PAYLOAD_BYTES = MAX_DURATION_SECONDS * EXPECTED_SAMPLE_RATE * EXPECTED_CHANNELS * EXPECTED_BYTES_PER_SAMPLE
 
@@ -32,8 +33,8 @@ def validate_audio_chunk(audio_data: bytes) -> Tuple[bool, Optional[Dict[str, An
     """
     Validate audio chunk format and size
 
-    Expected format: 48kHz, stereo, float32
-    Max size: 11.52MB (30 seconds)
+    Expected format: 16kHz, mono, float32
+    Max size: 1.92MB (30 seconds)
 
     Args:
         audio_data: Raw audio bytes
@@ -65,9 +66,9 @@ def validate_audio_chunk(audio_data: bytes) -> Tuple[bool, Optional[Dict[str, An
                 "message": error_msg
             }
 
-        # Validation 3: Frame alignment (must be multiple of 8 bytes for stereo float32)
+        # Validation 3: Frame alignment (must be multiple of 4 bytes for mono float32)
         if len(audio_data) % EXPECTED_FRAME_SIZE != 0:
-            error_msg = f"Audio payload size not aligned to frame size: {len(audio_data)} bytes (expected multiple of {EXPECTED_FRAME_SIZE} bytes for stereo float32)"
+            error_msg = f"Audio payload size not aligned to frame size: {len(audio_data)} bytes (expected multiple of {EXPECTED_FRAME_SIZE} bytes for mono float32)"
             logger.warning(f"Audio validation failed: {error_msg}")
             return False, {
                 "type": "error",
@@ -128,7 +129,7 @@ def validate_audio_format_metadata(
 
         # Validation 2: Channel count
         if channels != EXPECTED_CHANNELS:
-            error_msg = f"Invalid channel count: {channels} (expected {EXPECTED_CHANNELS} for stereo)"
+            error_msg = f"Invalid channel count: {channels} (expected {EXPECTED_CHANNELS} for mono)"
             logger.warning(f"Audio format validation failed: {error_msg}")
             return False, {
                 "type": "error",

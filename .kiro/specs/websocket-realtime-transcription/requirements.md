@@ -21,7 +21,7 @@ Wernickeは、WebSocketベースのリアルタイム音声文字起こしシス
 - **VoiceActivityDetector**: VADによる音声/無音判定（-85dB threshold）
 - **WebSocketClient**: 自動再接続、エラーハンドリング
 - **TranscriptionDisplay**: 人間が読みやすい形式で表示（~/transcriptions/live.txt）
-- **設定**: 48kHz, stereo, 32-bit float
+- **設定**: 16kHz, mono, 32-bit float（Whisper/Silero-VAD最適化、帯域効率6倍改善）
 
 ### 3. Windows Server (Python/FastAPI)
 - **WebSocketServer**: FastAPI + uvicorn
@@ -127,7 +127,7 @@ Wernickeは、WebSocketベースのリアルタイム音声文字起こしシス
 
 #### R2.1: 音声キャプチャ
 **WHEN** システムが起動する
-**THEN** BlackHoleから音声をキャプチャする (48kHz, stereo, 32-bit float)
+**THEN** BlackHoleから音声をキャプチャする (16kHz, mono, 32-bit float)
 
 **WHEN** FFmpegで音声をキャプチャする
 **THEN** Float32Array形式で出力される

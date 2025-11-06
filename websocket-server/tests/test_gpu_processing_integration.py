@@ -67,7 +67,11 @@ class TestTask16_2GPUProcessingIntegration:
                 with patch.object(GPUPipeline, '_load_models'):
                     pipeline = GPUPipeline()
                     pipeline.whisper_model = MagicMock()
-                    pipeline.whisper_model.transcribe = MagicMock(return_value=mock_whisper_result)
+                    pipeline.whisper_processor = MagicMock()
+                    pipeline.whisper_processor.return_value = MagicMock(input_features=MagicMock(to=MagicMock(return_value=MagicMock())))
+                    pipeline.whisper_model.generate = MagicMock(return_value=[[1, 2, 3]])
+                    pipeline.whisper_processor.batch_decode = MagicMock(return_value=['これはテスト音声です。音声認識の精度を確認しています。'])
+                    pipeline.device = 'cuda'
 
                     # Transcribe audio
                     result = await pipeline.transcribe_audio(
@@ -243,7 +247,11 @@ class TestTask16_2GPUProcessingIntegration:
                 with patch.object(GPUPipeline, '_load_models'):
                     pipeline = GPUPipeline()
                     pipeline.whisper_model = MagicMock()
-                    pipeline.whisper_model.transcribe = MagicMock(return_value=mock_whisper_result)
+                    pipeline.whisper_processor = MagicMock()
+                    pipeline.whisper_processor.return_value = MagicMock(input_features=MagicMock(to=MagicMock(return_value=MagicMock())))
+                    pipeline.whisper_model.generate = MagicMock(return_value=[[1, 2, 3]])
+                    pipeline.whisper_processor.batch_decode = MagicMock(return_value=['これはテスト音声です'])
+                    pipeline.device = 'cuda'
 
                     # Process through full pipeline (simulated)
                     whisper_result = await pipeline.transcribe_audio(

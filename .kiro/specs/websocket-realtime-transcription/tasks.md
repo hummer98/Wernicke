@@ -180,7 +180,7 @@
 - [x] 10.1 AudioCaptureServiceの適応 ✅
   - 既存AudioCaptureServiceの再利用
   - WebSocketClientへの音声チャンク転送連携
-  - FFmpeg + BlackHole設定の維持（48kHz, stereo, 32-bit float）
+  - FFmpeg + BlackHole設定を16kHz mono 32-bit floatに最適化（Whisper/VAD互換、帯域83%削減）
   - 音声キャプチャエラーハンドリングと自動再起動
   - _Requirements: R2.1_
   - **Implementation**: `TranscriptionClient.handleAudioChunk()`
@@ -352,8 +352,8 @@
 
 - [x] 18. セキュリティ実装
 - [x] 18.1 入力検証とサイズ制限
-  - 音声形式検証（48kHz, stereo, float32）
-  - ペイロードサイズ制限（最大11.52MB）
+  - 音声形式検証（16kHz, mono, float32）
+  - ペイロードサイズ制限（最大1.92MB）
   - 不正形式検出とエラーメッセージ返却（code="INVALID_FORMAT"）
   - 検証エラーログの記録
   - _Requirements: R9.1_

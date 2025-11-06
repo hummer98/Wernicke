@@ -36,11 +36,17 @@ class TestPartialResultsPipeline:
         Then: Only Whisper transcription is executed (no alignment, diarization, LLM)
         """
         from services.gpu_pipeline import GPUPipeline
-        
+
         with patch('torch.cuda.is_available', return_value=True):
-            pipeline = GPUPipeline()
-            pipeline.whisper_model = MagicMock()
-            pipeline.whisper_model.transcribe.return_value = mock_whisper_result
+            with patch('torch.cuda.get_device_name', return_value='NVIDIA RTX 3090'):
+                with patch.object(GPUPipeline, '_load_models'):
+                    pipeline = GPUPipeline()
+                    pipeline.whisper_model = MagicMock()
+                    pipeline.whisper_processor = MagicMock()
+                    pipeline.whisper_processor.return_value = MagicMock(input_features=MagicMock(to=MagicMock(return_value=MagicMock())))
+                    pipeline.whisper_model.generate = MagicMock(return_value=[[1, 2, 3]])
+                    pipeline.whisper_processor.batch_decode = MagicMock(return_value=['これはテスト音声です。'])
+                    pipeline.device = 'cuda'
             
             # Mock audio data
             audio_data = b'\x00' * 1024
@@ -68,11 +74,17 @@ class TestPartialResultsPipeline:
         Then: JSON contains type="partial", buffer_id, timestamp_range, segments
         """
         from services.gpu_pipeline import GPUPipeline
-        
+
         with patch('torch.cuda.is_available', return_value=True):
-            pipeline = GPUPipeline()
-            pipeline.whisper_model = MagicMock()
-            pipeline.whisper_model.transcribe.return_value = mock_whisper_result
+            with patch('torch.cuda.get_device_name', return_value='NVIDIA RTX 3090'):
+                with patch.object(GPUPipeline, '_load_models'):
+                    pipeline = GPUPipeline()
+                    pipeline.whisper_model = MagicMock()
+                    pipeline.whisper_processor = MagicMock()
+                    pipeline.whisper_processor.return_value = MagicMock(input_features=MagicMock(to=MagicMock(return_value=MagicMock())))
+                    pipeline.whisper_model.generate = MagicMock(return_value=[[1, 2, 3]])
+                    pipeline.whisper_processor.batch_decode = MagicMock(return_value=['これはテスト音声です。'])
+                    pipeline.device = 'cuda'
             
             audio_data = b'\x00' * 1024
             buffer_id = 'buff_20250105_120000_001'
@@ -101,7 +113,7 @@ class TestPartialResultsPipeline:
         Then: timestamp_range contains min start and max end from all segments
         """
         from services.gpu_pipeline import GPUPipeline
-        
+
         mock_result = {
             'text': 'テスト',
             'segments': [
@@ -109,11 +121,17 @@ class TestPartialResultsPipeline:
                 {'start': 1.5, 'end': 3.0, 'text': 'テストです'}
             ]
         }
-        
+
         with patch('torch.cuda.is_available', return_value=True):
-            pipeline = GPUPipeline()
-            pipeline.whisper_model = MagicMock()
-            pipeline.whisper_model.transcribe.return_value = mock_result
+            with patch('torch.cuda.get_device_name', return_value='NVIDIA RTX 3090'):
+                with patch.object(GPUPipeline, '_load_models'):
+                    pipeline = GPUPipeline()
+                    pipeline.whisper_model = MagicMock()
+                    pipeline.whisper_processor = MagicMock()
+                    pipeline.whisper_processor.return_value = MagicMock(input_features=MagicMock(to=MagicMock(return_value=MagicMock())))
+                    pipeline.whisper_model.generate = MagicMock(return_value=[[1, 2, 3]])
+                    pipeline.whisper_processor.batch_decode = MagicMock(return_value=['これはテストです'])
+                    pipeline.device = 'cuda'
             
             audio_data = b'\x00' * 1024
             buffer_id = 'buff_20250105_120000_001'
@@ -138,11 +156,17 @@ class TestPartialResultsPipeline:
         Then: Latency is measured and logged (target: 2-3 seconds)
         """
         from services.gpu_pipeline import GPUPipeline
-        
+
         with patch('torch.cuda.is_available', return_value=True):
-            pipeline = GPUPipeline()
-            pipeline.whisper_model = MagicMock()
-            pipeline.whisper_model.transcribe.return_value = mock_whisper_result
+            with patch('torch.cuda.get_device_name', return_value='NVIDIA RTX 3090'):
+                with patch.object(GPUPipeline, '_load_models'):
+                    pipeline = GPUPipeline()
+                    pipeline.whisper_model = MagicMock()
+                    pipeline.whisper_processor = MagicMock()
+                    pipeline.whisper_processor.return_value = MagicMock(input_features=MagicMock(to=MagicMock(return_value=MagicMock())))
+                    pipeline.whisper_model.generate = MagicMock(return_value=[[1, 2, 3]])
+                    pipeline.whisper_processor.batch_decode = MagicMock(return_value=['これはテスト音声です。'])
+                    pipeline.device = 'cuda'
             
             audio_data = b'\x00' * 1024
             buffer_id = 'buff_20250105_120000_001'
@@ -169,11 +193,17 @@ class TestPartialResultsPipeline:
         Then: Each segment contains start, end, text
         """
         from services.gpu_pipeline import GPUPipeline
-        
+
         with patch('torch.cuda.is_available', return_value=True):
-            pipeline = GPUPipeline()
-            pipeline.whisper_model = MagicMock()
-            pipeline.whisper_model.transcribe.return_value = mock_whisper_result
+            with patch('torch.cuda.get_device_name', return_value='NVIDIA RTX 3090'):
+                with patch.object(GPUPipeline, '_load_models'):
+                    pipeline = GPUPipeline()
+                    pipeline.whisper_model = MagicMock()
+                    pipeline.whisper_processor = MagicMock()
+                    pipeline.whisper_processor.return_value = MagicMock(input_features=MagicMock(to=MagicMock(return_value=MagicMock())))
+                    pipeline.whisper_model.generate = MagicMock(return_value=[[1, 2, 3]])
+                    pipeline.whisper_processor.batch_decode = MagicMock(return_value=['これはテスト音声です。'])
+                    pipeline.device = 'cuda'
             
             audio_data = b'\x00' * 1024
             buffer_id = 'buff_20250105_120000_001'
@@ -200,16 +230,22 @@ class TestPartialResultsPipeline:
         Then: Partial result with empty segments is returned
         """
         from services.gpu_pipeline import GPUPipeline
-        
+
         mock_empty_result = {
             'text': '',
             'segments': []
         }
-        
+
         with patch('torch.cuda.is_available', return_value=True):
-            pipeline = GPUPipeline()
-            pipeline.whisper_model = MagicMock()
-            pipeline.whisper_model.transcribe.return_value = mock_empty_result
+            with patch('torch.cuda.get_device_name', return_value='NVIDIA RTX 3090'):
+                with patch.object(GPUPipeline, '_load_models'):
+                    pipeline = GPUPipeline()
+                    pipeline.whisper_model = MagicMock()
+                    pipeline.whisper_processor = MagicMock()
+                    pipeline.whisper_processor.return_value = MagicMock(input_features=MagicMock(to=MagicMock(return_value=MagicMock())))
+                    pipeline.whisper_model.generate = MagicMock(return_value=[[1, 2, 3]])
+                    pipeline.whisper_processor.batch_decode = MagicMock(return_value=[''])
+                    pipeline.device = 'cuda'
             
             audio_data = b'\x00' * 1024
             buffer_id = 'buff_20250105_120000_001'
@@ -234,11 +270,15 @@ class TestPartialResultsPipeline:
         Then: Error result is returned with type="error"
         """
         from services.gpu_pipeline import GPUPipeline
-        
+
         with patch('torch.cuda.is_available', return_value=True):
-            pipeline = GPUPipeline()
-            pipeline.whisper_model = MagicMock()
-            pipeline.whisper_model.transcribe.side_effect = Exception("Transcription failed")
+            with patch('torch.cuda.get_device_name', return_value='NVIDIA RTX 3090'):
+                with patch.object(GPUPipeline, '_load_models'):
+                    pipeline = GPUPipeline()
+                    pipeline.whisper_model = MagicMock()
+                    pipeline.whisper_processor = MagicMock()
+                    pipeline.whisper_processor.side_effect = Exception("Transcription failed")
+                    pipeline.device = 'cuda'
             
             audio_data = b'\x00' * 1024
             buffer_id = 'buff_20250105_120000_001'

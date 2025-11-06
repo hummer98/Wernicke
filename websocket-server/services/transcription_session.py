@@ -28,12 +28,12 @@ class TranscriptionSession:
     """
     
     # Audio configuration
-    SAMPLE_RATE = 48000  # 48kHz
-    CHANNELS = 2  # Stereo
+    SAMPLE_RATE = 16000  # 16kHz (Whisper/Silero-VAD optimized)
+    CHANNELS = 1  # Mono (Whisper/Silero-VAD requirement)
     BYTES_PER_SAMPLE = 4  # 32-bit float
-    BYTES_PER_SECOND = SAMPLE_RATE * CHANNELS * BYTES_PER_SAMPLE  # 384,000 bytes/sec
+    BYTES_PER_SECOND = SAMPLE_RATE * CHANNELS * BYTES_PER_SAMPLE  # 64,000 bytes/sec
     MAX_BUFFER_DURATION = 30  # seconds
-    MAX_BUFFER_SIZE = BYTES_PER_SECOND * MAX_BUFFER_DURATION  # 11,520,000 bytes
+    MAX_BUFFER_SIZE = BYTES_PER_SECOND * MAX_BUFFER_DURATION  # 1,920,000 bytes (83% reduction)
 
     # VAD configuration
     SILENCE_THRESHOLD = 2.0  # seconds

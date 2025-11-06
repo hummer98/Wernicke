@@ -35,8 +35,8 @@ describe('AudioCaptureService', () => {
   let mockProcesses: any[] = [];
   const mockConfig = {
     deviceName: 'BlackHole 2ch',
-    sampleRate: 48000,
-    channels: 2,
+    sampleRate: 16000,
+    channels: 1,
     format: 'f32le',
   };
 

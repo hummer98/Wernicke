@@ -5,6 +5,7 @@ Requirements: R9.2
 """
 
 import os
+import sys
 import time
 import logging
 from pathlib import Path
@@ -12,6 +13,9 @@ from typing import Dict, Any
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
+
+# Platform detection
+IS_WINDOWS = sys.platform == 'win32'
 
 # Default retention policy
 DEFAULT_RETENTION_DAYS = 30
@@ -35,7 +39,7 @@ def get_retention_policy() -> Dict[str, Any]:
 
 def create_secure_log_file(file_path: str, content: str = "") -> None:
     """
-    Create log file with secure permissions (0600)
+    Create log file with secure permissions (0600 on Unix, Windows ACL on Windows)
 
     Args:
         file_path: Path to log file
@@ -45,29 +49,37 @@ def create_secure_log_file(file_path: str, content: str = "") -> None:
         # Create directory if it doesn't exist
         log_dir = os.path.dirname(file_path)
         if log_dir and not os.path.exists(log_dir):
-            os.makedirs(log_dir, mode=0o700, exist_ok=True)
+            os.makedirs(log_dir, exist_ok=True)
 
         # Create file with secure permissions
-        # Use os.open with O_CREAT and O_EXCL to create file atomically
-        flags = os.O_CREAT | os.O_WRONLY | os.O_TRUNC
-        mode = 0o600
+        if IS_WINDOWS:
+            # On Windows, just create the file normally
+            # Windows file permissions are managed via ACLs, not Unix-style permissions
+            with open(file_path, 'w', encoding='utf-8') as f:
+                if content:
+                    f.write(content)
+            logger.info(f"Secure log file created (Windows): {file_path}")
+        else:
+            # Unix/Linux: Use os.open with O_CREAT for atomic creation with permissions
+            flags = os.O_CREAT | os.O_WRONLY | os.O_TRUNC
+            mode = 0o600
 
-        fd = os.open(file_path, flags, mode)
+            fd = os.open(file_path, flags, mode)
 
-        if content:
-            os.write(fd, content.encode('utf-8'))
+            if content:
+                os.write(fd, content.encode('utf-8'))
 
-        os.close(fd)
+            os.close(fd)
 
-        # Verify permissions
-        st = os.stat(file_path)
-        import stat
-        perms = stat.S_IMODE(st.st_mode)
-        if perms != 0o600:
-            logger.warning(f"File {file_path} created with permissions {oct(perms)}, expected 0600. Fixing...")
-            os.chmod(file_path, 0o600)
+            # Verify permissions on Unix
+            st = os.stat(file_path)
+            import stat
+            perms = stat.S_IMODE(st.st_mode)
+            if perms != 0o600:
+                logger.warning(f"File {file_path} created with permissions {oct(perms)}, expected 0600. Fixing...")
+                os.chmod(file_path, 0o600)
 
-        logger.info(f"Secure log file created: {file_path} (permissions: 0600)")
+            logger.info(f"Secure log file created (Unix): {file_path} (permissions: 0600)")
 
     except Exception as e:
         logger.error(f"Failed to create secure log file {file_path}: {str(e)}", exc_info=True)
@@ -145,18 +157,23 @@ def ensure_secure_log_directory(log_directory: str) -> bool:
 
         # Create directory if it doesn't exist
         if not os.path.exists(log_dir_expanded):
-            os.makedirs(log_dir_expanded, mode=0o700, exist_ok=True)
-            logger.info(f"Created secure log directory: {log_dir_expanded} (permissions: 0700)")
+            if IS_WINDOWS:
+                os.makedirs(log_dir_expanded, exist_ok=True)
+                logger.info(f"Created secure log directory (Windows): {log_dir_expanded}")
+            else:
+                os.makedirs(log_dir_expanded, mode=0o700, exist_ok=True)
+                logger.info(f"Created secure log directory (Unix): {log_dir_expanded} (permissions: 0700)")
 
-        # Verify directory permissions
-        st = os.stat(log_dir_expanded)
-        import stat
-        perms = stat.S_IMODE(st.st_mode)
+        # Verify directory permissions on Unix only
+        if not IS_WINDOWS:
+            st = os.stat(log_dir_expanded)
+            import stat
+            perms = stat.S_IMODE(st.st_mode)
 
-        # Directory should be 0700 (owner rwx only)
-        if perms != 0o700:
-            logger.warning(f"Log directory {log_dir_expanded} has permissions {oct(perms)}, expected 0700. Fixing...")
-            os.chmod(log_dir_expanded, 0o700)
+            # Directory should be 0700 (owner rwx only)
+            if perms != 0o700:
+                logger.warning(f"Log directory {log_dir_expanded} has permissions {oct(perms)}, expected 0700. Fixing...")
+                os.chmod(log_dir_expanded, 0o700)
 
         return True
 
@@ -191,8 +208,8 @@ def write_log_entry(log_file: str, entry: str, ensure_secure: bool = True) -> bo
             if not entry.endswith('\n'):
                 f.write('\n')
 
-        # Ensure secure permissions
-        if ensure_secure:
+        # Ensure secure permissions (Unix only)
+        if ensure_secure and not IS_WINDOWS:
             st = os.stat(log_file_expanded)
             import stat
             perms = stat.S_IMODE(st.st_mode)

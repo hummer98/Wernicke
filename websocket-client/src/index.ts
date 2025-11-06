@@ -111,13 +111,13 @@ const config: TranscriptionClientConfig = {
   },
   audioCapture: {
     deviceName: cliConfig.audioCapture?.deviceName || process.env['AUDIO_DEVICE'] || 'BlackHole 2ch',
-    sampleRate: 48000,
-    channels: 2,
+    sampleRate: 16000, // Changed: 48kHz -> 16kHz for Whisper/Silero-VAD compatibility
+    channels: 1, // Changed: stereo -> mono for Whisper/Silero-VAD compatibility
     format: 'f32le', // 32-bit float little-endian
   },
   vad: {
-    sampleRate: 48000,
-    channels: 2,
+    sampleRate: 16000, // Changed: 48kHz -> 16kHz to match audio capture
+    channels: 1, // Changed: stereo -> mono to match audio capture
     silenceThreshold: cliConfig.vad?.silenceThreshold ?? parseFloat(process.env['VAD_SILENCE_THRESHOLD'] || '-85'), // dB
     silenceDuration: cliConfig.vad?.silenceDuration ?? parseFloat(process.env['VAD_SILENCE_DURATION'] || '10'), // seconds
     forceVoiceAfter: cliConfig.vad?.forceVoiceAfter ?? parseFloat(process.env['VAD_FORCE_VOICE_AFTER'] || '300'), // 5 minutes

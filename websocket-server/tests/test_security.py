@@ -7,11 +7,15 @@ Tests file permissions, data retention, memory cleanup
 Requirements: R9.1, R9.2
 """
 
+import sys
 import pytest
 import numpy as np
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
 import struct
+
+# Platform detection
+IS_WINDOWS = sys.platform == 'win32'
 
 
 @pytest.fixture
@@ -320,6 +324,10 @@ class TestTask18_2FilePermissionsAndDataRetention:
         log_file = tmpdir.join("test.log")
         log_file.write("test log content")
 
+        # Skip permission test on Windows (Windows uses ACLs, not Unix permissions)
+        if IS_WINDOWS:
+            pytest.skip("File permission test not applicable on Windows (uses ACLs)")
+
         # Apply 0600 permissions
         os.chmod(str(log_file), 0o600)
 
@@ -487,7 +495,7 @@ class TestTask18_2FilePermissionsAndDataRetention:
         Task: 18.2
         Given: New log file is created
         When: File is written
-        Then: File is created with 0600 permissions from the start
+        Then: File is created with 0600 permissions from the start (Unix) or created successfully (Windows)
         """
         import os
         import stat
@@ -498,8 +506,14 @@ class TestTask18_2FilePermissionsAndDataRetention:
         # Create log file with secure permissions
         create_secure_log_file(log_file_path)
 
-        # Verify file exists and has correct permissions
+        # Verify file exists
         assert os.path.exists(log_file_path)
+
+        # Skip permission check on Windows (Windows uses ACLs, not Unix permissions)
+        if IS_WINDOWS:
+            pytest.skip("File permission test not applicable on Windows (uses ACLs)")
+
+        # Verify permissions on Unix
         st = os.stat(log_file_path)
         perms = stat.S_IMODE(st.st_mode)
         assert perms == 0o600, f"Expected 0600 permissions, got {oct(perms)}"

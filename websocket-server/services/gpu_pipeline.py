@@ -225,24 +225,23 @@ class GPUPipeline:
         """
         try:
             # Convert bytes to numpy array
-            # Format: 48kHz, 2 channels, float32 (4 bytes per sample)
+            # Format: 16kHz, 1 channel (mono), float32 (4 bytes per sample)
             audio_np = np.frombuffer(audio_data, dtype=np.float32)
 
-            # Reshape to (samples, channels) if stereo
-            # Whisper expects mono, so we'll convert stereo to mono by averaging
-            audio_np = audio_np.reshape(-1, 2)
-            audio_mono = audio_np.mean(axis=1)  # Average left and right channels
+            logger.info(f"Transcribing audio: {len(audio_np)} samples at 16kHz")
 
-            logger.info(f"Transcribing audio: {len(audio_mono)} samples")
-
-            # Prepare input for Whisper
-            # Whisper expects 16kHz audio, so we need to resample
-            # For now, we'll use the original sample rate and let Whisper handle it
+            # Prepare input for Whisper (already in correct format: 16kHz mono)
             input_features = self.whisper_processor(
-                audio_mono.astype(np.float32),
-                sampling_rate=48000,  # Our sample rate
+                audio_np.astype(np.float32),
+                sampling_rate=16000,  # Whisper's expected sample rate
                 return_tensors="pt"
-            ).input_features.to(self.device)
+            ).input_features
+
+            # Convert to appropriate dtype and move to device
+            if self.device == "cuda":
+                input_features = input_features.to(self.device, dtype=torch.float16)
+            else:
+                input_features = input_features.to(self.device)
 
             # Generate transcription
             predicted_ids = self.whisper_model.generate(
@@ -253,14 +252,13 @@ class GPUPipeline:
             )
 
             # Decode transcription
-            transcription = self.whisper_processor.batch_decode(
+            transcription_list = self.whisper_processor.batch_decode(
                 predicted_ids,
-                skip_special_tokens=True,
-                output_offsets=True
-            )[0]
+                skip_special_tokens=True
+            )
 
-            # Extract text and segments
-            text = transcription.text
+            # Extract text (batch_decode returns a list of strings)
+            text = transcription_list[0] if transcription_list else ""
             segments = []
 
             # Convert timestamp tokens to segments
@@ -270,7 +268,7 @@ class GPUPipeline:
             if text.strip():
                 segments = [{
                     'start': 0.0,
-                    'end': len(audio_mono) / 48000.0,  # Approximate duration
+                    'end': len(audio_np) / 16000.0,  # Approximate duration at 16kHz
                     'text': text
                 }]
 
@@ -293,14 +291,14 @@ class GPUPipeline:
                 'message': str(e)
             }
 
-    async def process_partial(
+    async def process_partial_and_get_whisper_result(
         self,
         audio_data: bytes,
         buffer_id: str,
         buffer_start_time: float
-    ) -> Dict[str, Any]:
+    ) -> tuple[Dict[str, Any], Dict[str, Any]]:
         """
-        Process partial results (Whisper only, no alignment/diarization/LLM)
+        Process audio: Execute Whisper once and return both partial result and whisper result
 
         Task 4.1: Partial Results Processing Pipeline
 
@@ -310,16 +308,16 @@ class GPUPipeline:
             buffer_start_time: Buffer start timestamp
 
         Returns:
-            Dict with type="partial", buffer_id, timestamp_range, segments, latency_ms
+            Tuple of (partial_result, whisper_result) - whisper_result is used for final processing
         """
         start_time = time.time()
 
         try:
-            # Run Whisper transcription only
+            # Run Whisper transcription only once
             whisper_result = await self.transcribe_audio(audio_data, buffer_start_time)
 
             if 'error' in whisper_result:
-                return whisper_result
+                return whisper_result, None
 
             # Extract segments
             segments = whisper_result.get('segments', [])
@@ -342,7 +340,8 @@ class GPUPipeline:
 
             logger.info(f"Partial result generated: buffer_id={buffer_id}, latency={latency_ms:.1f}ms")
 
-            return {
+            # Create partial result
+            partial_result = {
                 'type': 'partial',
                 'buffer_id': buffer_id,
                 'text': text,
@@ -351,12 +350,16 @@ class GPUPipeline:
                 'latency_ms': latency_ms
             }
 
+            # Return both partial result and whisper result for final processing
+            return partial_result, whisper_result
+
         except Exception as e:
             logger.error(f"Partial processing error: {str(e)}", exc_info=True)
-            return {
+            error_result = {
                 'error': True,
                 'message': str(e)
             }
+            return error_result, None
 
     def cleanup(self):
         """
@@ -491,33 +494,34 @@ class GPUPipeline:
     # Task 8.1: Final Results Processing Pipeline
     async def process_final(
         self,
+        whisper_result: Dict[str, Any],
         audio_data: bytes,
         buffer_id: str,
         buffer_start_time: float
     ) -> Dict[str, Any]:
         """
-        Process final results with full pipeline: Whisper → Alignment → Diarization → LLM
-        
+        Process final results with full pipeline: Alignment → Diarization → LLM
+        (Whisper result is reused from partial processing)
+
         Task 8.1: Final Results Processing Pipeline
-        
+
         Args:
+            whisper_result: Pre-computed Whisper transcription result
             audio_data: Raw audio bytes (48kHz, stereo, float32)
             buffer_id: Buffer identifier
             buffer_start_time: Buffer start timestamp
-            
+
         Returns:
             Dict with type="final", buffer_id, timestamp_range, corrected segments
         """
         start_time = time.time()
-        
+
         try:
-            # Step 1: Whisper transcription
             logger.info(f"Final processing started: buffer_id={buffer_id}")
-            whisper_result = await self.transcribe_audio(audio_data, buffer_start_time)
-            
+
             if 'error' in whisper_result:
                 return whisper_result
-            
+
             segments = whisper_result.get('segments', [])
             text = whisper_result.get('text', '')
             

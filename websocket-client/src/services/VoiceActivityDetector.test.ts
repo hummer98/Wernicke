@@ -9,8 +9,8 @@ import { VoiceActivityDetector, VADConfig } from './VoiceActivityDetector';
 describe('VoiceActivityDetector - Task 15.2', () => {
   let vad: VoiceActivityDetector;
   const defaultConfig: VADConfig = {
-    sampleRate: 48000,
-    channels: 2,
+    sampleRate: 16000,
+    channels: 1,
     silenceThreshold: -85, // dB
     silenceDuration: 2.0, // seconds
     forceVoiceAfter: 300, // seconds (5 minutes)
@@ -24,7 +24,7 @@ describe('VoiceActivityDetector - Task 15.2', () => {
     test('should calculate RMS level in dB for audio buffer', () => {
       // Given: Audio buffer with known amplitude
       // Create a simple sine wave at -6dB (amplitude = 0.5)
-      const sampleRate = 48000;
+      const sampleRate = 16000;
       const duration = 0.1; // 100ms
       const numSamples = Math.floor(sampleRate * duration);
       const buffer = Buffer.alloc(numSamples * 2); // 16-bit samples
@@ -268,7 +268,7 @@ describe('VoiceActivityDetector - Task 15.2', () => {
  * Helper function to create audio buffer with specific RMS level in dB
  */
 function createBufferWithRMS(targetDB: number): Buffer {
-  const sampleRate = 48000;
+  const sampleRate = 16000;
   const duration = 0.1; // 100ms
   const numSamples = Math.floor(sampleRate * duration);
   const buffer = Buffer.alloc(numSamples * 2);
