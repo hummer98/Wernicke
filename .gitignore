@@ -62,3 +62,4 @@ transcription-server/cuda-server/whisperx-env/
 .channels_cache_v2.json
 .users_cache.json
 *.cache
+.pytest_cache/
