@@ -226,23 +226,24 @@ class GPUPipeline:
                 'message': str(error)
             }
     
-    def _detect_speech_segments(self, audio_np: np.ndarray) -> bool:
+    def _detect_speech_segments(self, audio_np: np.ndarray) -> List[Dict[str, int]]:
         """
-        Detect if audio contains speech using Silero-VAD
+        Detect speech segments using Silero-VAD
 
         Args:
             audio_np: Audio numpy array (16kHz mono float32)
 
         Returns:
-            True if speech detected, False otherwise
+            List of speech segments [{'start': int, 'end': int}, ...]
+            Empty list if no speech detected
         """
         if self.vad_model is None:
-            # VAD disabled, assume speech present
-            return True
+            # VAD disabled, return full audio as single segment
+            return [{'start': 0, 'end': len(audio_np)}]
 
         try:
             # Convert numpy to torch tensor for VAD
-            audio_tensor = torch.from_numpy(audio_np)
+            audio_tensor = torch.from_numpy(audio_np.copy())
 
             # Get speech timestamps (returns list of {'start': int, 'end': int})
             speech_timestamps = get_speech_timestamps(
@@ -255,9 +256,7 @@ class GPUPipeline:
                 return_seconds=False
             )
 
-            has_speech = len(speech_timestamps) > 0
-
-            if has_speech:
+            if len(speech_timestamps) > 0:
                 total_speech_duration = sum(
                     (seg['end'] - seg['start']) / 16000.0
                     for seg in speech_timestamps
@@ -266,12 +265,12 @@ class GPUPipeline:
             else:
                 logger.info("VAD: No speech detected (silence/noise only)")
 
-            return has_speech
+            return speech_timestamps
 
         except Exception as e:
             logger.error(f"VAD error: {str(e)}", exc_info=True)
-            # On error, assume speech present to avoid skipping valid audio
-            return True
+            # On error, return full audio as single segment to avoid skipping valid audio
+            return [{'start': 0, 'end': len(audio_np)}]
 
     async def transcribe_audio(
         self,
@@ -298,10 +297,10 @@ class GPUPipeline:
 
             logger.info(f"Transcribing audio: {len(audio_np)} samples at 16kHz")
 
-            # Silero-VAD: Check if audio contains speech
-            has_speech = self._detect_speech_segments(audio_np)
+            # Silero-VAD: Get speech segments
+            speech_segments = self._detect_speech_segments(audio_np)
 
-            if not has_speech:
+            if len(speech_segments) == 0:
                 # No speech detected - return empty result (prevent hallucinations)
                 logger.info("Skipping transcription: No speech detected by VAD")
                 return {
@@ -310,9 +309,20 @@ class GPUPipeline:
                     'vad_skipped': True
                 }
 
-            # Prepare input for Whisper (already in correct format: 16kHz mono)
+            # Extract and concatenate speech-only audio segments
+            speech_only_segments = [
+                audio_np[seg['start']:seg['end']]
+                for seg in speech_segments
+            ]
+            speech_only_audio = np.concatenate(speech_only_segments)
+
+            original_duration = len(audio_np) / 16000.0
+            speech_duration = len(speech_only_audio) / 16000.0
+            logger.info(f"VAD filtering: {original_duration:.2f}s -> {speech_duration:.2f}s ({speech_duration/original_duration*100:.1f}%)")
+
+            # Prepare input for Whisper (speech segments only)
             input_features = self.whisper_processor(
-                audio_np.astype(np.float32),
+                speech_only_audio.astype(np.float32),
                 sampling_rate=16000,  # Whisper's expected sample rate
                 return_tensors="pt"
             ).input_features
@@ -348,7 +358,7 @@ class GPUPipeline:
             if text.strip():
                 segments = [{
                     'start': 0.0,
-                    'end': len(audio_np) / 16000.0,  # Approximate duration at 16kHz
+                    'end': len(speech_only_audio) / 16000.0,  # Speech-only duration at 16kHz
                     'text': text
                 }]
 
