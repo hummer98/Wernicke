@@ -21,7 +21,8 @@
       "Bash(venv/Scripts/pip.exe:*)",
       "Bash(ipconfig:*)",
       "Bash(findstr:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(podman:*)"
     ],
     "deny": [],
     "ask": []
