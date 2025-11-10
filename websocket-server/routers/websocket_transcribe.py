@@ -182,24 +182,31 @@ async def websocket_endpoint(websocket: WebSocket):
                                     buffer_start_time=buffer_start_time
                                 )
 
-                                # Send partial result to client immediately
-                                await websocket.send_json(partial_result)
-                                logger.info(f"Partial result sent: buffer_id={buffer_id}, text='{partial_result.get('text', '')[:100]}...'")
+                                # Check if result has non-empty text
+                                result_text = partial_result.get('text', '')
 
-                                # Start final processing in background (Task 8.2)
-                                # Reuse Whisper result for Alignment → Diarization → LLM
-                                if whisper_result is not None:
-                                    asyncio.create_task(
-                                        process_and_send_final_result(
-                                            websocket=websocket,
-                                            gpu_pipeline=gpu_pipeline,
-                                            whisper_result=whisper_result,
-                                            audio_data=buffer_audio,
-                                            buffer_id=buffer_id,
-                                            buffer_start_time=buffer_start_time
+                                if result_text:
+                                    # Send partial result to client immediately (only if text is not empty)
+                                    await websocket.send_json(partial_result)
+                                    logger.info(f"Partial result sent: buffer_id={buffer_id}, text='{result_text[:100]}...'")
+
+                                    # Start final processing in background (Task 8.2)
+                                    # Reuse Whisper result for Alignment → Diarization → LLM
+                                    if whisper_result is not None:
+                                        asyncio.create_task(
+                                            process_and_send_final_result(
+                                                websocket=websocket,
+                                                gpu_pipeline=gpu_pipeline,
+                                                whisper_result=whisper_result,
+                                                audio_data=buffer_audio,
+                                                buffer_id=buffer_id,
+                                                buffer_start_time=buffer_start_time
+                                            )
                                         )
-                                    )
-                                    logger.info(f"Final processing started in background: buffer_id={buffer_id}")
+                                        logger.info(f"Final processing started in background: buffer_id={buffer_id}")
+                                else:
+                                    # Skip sending empty results (no speech detected by VAD)
+                                    logger.info(f"Skipping empty result: buffer_id={buffer_id} (no speech detected)")
 
                             except Exception as e:
                                 logger.error(f"Partial processing error: {str(e)}", exc_info=True)
