@@ -17,6 +17,7 @@ Kiro-style Spec Driven Development implementation using claude code slash comman
 ### Active Specifications
 
 - **websocket-realtime-transcription**: WebSocketベースのリアルタイム音声文字起こしシステム (Mac Client + Windows CUDA Server + LLM補正)
+- **websocket-client-compact-display**: WebSocketクライアントのCompact表示モード（テキストのみ、Partial逐次更新、Final確定表示）
 
 進捗確認: `/kiro:spec-status [feature-name]`
 
