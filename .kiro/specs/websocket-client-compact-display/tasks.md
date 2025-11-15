@@ -7,20 +7,20 @@ WebSocketクライアントにCompact表示モードを実装します。この�
 ## 実装タスク
 
 - [ ] 1. 表示モード型定義の追加
-- [ ] 1.1 DisplayMode型を型定義ファイルに追加
+- [x] 1.1 DisplayMode型を型定義ファイルに追加
   - 'compact' と 'verbose' の2つの値を持つユニオン型を定義
   - 既存のメッセージ型と同じファイルに配置して一元管理
   - 型の再利用性を確保
   - _Requirements: 1.1, 1.2, 1.3_
 
 - [ ] 2. CompactDisplay表示サービスの実装
-- [ ] 2.1 CompactDisplayクラスの基本構造を作成
+- [x] 2.1 CompactDisplayクラスの基本構造を作成
   - ITranscriptionDisplayインターフェースを実装
   - 内部状態管理用のhasPartialLineフラグを追加
   - process.stdoutへの参照を保持
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
 
-- [ ] 2.2 Partialメッセージ表示機能を実装
+- [x] 2.2 Partialメッセージ表示機能を実装
   - displayPartialResultメソッドを実装
   - `[Now][Speaker X] text` 形式のフォーマット生成
   - カーソル制御（`\r`）で同じ行を上書き更新
@@ -28,7 +28,7 @@ WebSocketクライアントにCompact表示モードを実装します。この�
   - 空テキスト時は `[Now]` のみ表示
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 4.1, 4.3_
 
-- [ ] 2.3 Finalメッセージ表示機能を実装
+- [x] 2.3 Finalメッセージ表示機能を実装
   - displayFinalResultメソッドを実装
   - `[HH:MM:SS][Speaker X] text` 形式のフォーマット生成
   - 現在のPartial行をクリア（`\r\x1b[K`）
@@ -37,7 +37,7 @@ WebSocketクライアントにCompact表示モードを実装します。この�
   - 新しい `[Now]` プレースホルダーを表示
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 4.2, 4.3_
 
-- [ ] 2.4 補助メソッドの実装
+- [x] 2.4 補助メソッドの実装
   - 話者情報フォーマット機能（formatSpeaker）
   - タイムスタンプフォーマット機能（formatTimestamp）
   - カーソル制御とターミナル表示制御

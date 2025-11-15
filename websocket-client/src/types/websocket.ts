@@ -127,3 +127,9 @@ export interface WebSocketStatistics {
   reconnectCount: number;
   lastReconnectTime?: Date;
 }
+
+/**
+ * Display mode for transcription output
+ * 文字起こし出力の表示モード
+ */
+export type DisplayMode = 'compact' | 'verbose';
