@@ -10,6 +10,7 @@ import { EventEmitter } from 'events';
 import { WebSocketClient } from './WebSocketClient';
 import { AudioCaptureService, AudioCaptureConfig } from './AudioCaptureService';
 import { VoiceActivityDetector, VADConfig } from './VoiceActivityDetector';
+import { ITranscriptionDisplay } from './CompactDisplay';
 import { WebSocketConfig, PartialResultMessage, FinalResultMessage } from '../types/websocket';
 import { logger } from './Logger';
 
@@ -21,6 +22,7 @@ export interface TranscriptionClientConfig {
   websocket: WebSocketConfig;
   audioCapture: AudioCaptureConfig;
   vad: VADConfig;
+  display?: ITranscriptionDisplay;
 }
 
 /**
@@ -32,11 +34,13 @@ export class TranscriptionClient extends EventEmitter {
   private audioCaptureService: AudioCaptureService;
   private vad: VoiceActivityDetector;
   private config: TranscriptionClientConfig;
+  private display?: ITranscriptionDisplay;
   private running: boolean = false;
 
   constructor(config: TranscriptionClientConfig) {
     super();
     this.config = config;
+    this.display = config.display;
 
     // Initialize WebSocket client
     this.wsClient = new WebSocketClient(config.websocket);
@@ -70,11 +74,15 @@ export class TranscriptionClient extends EventEmitter {
     this.wsClient.on('partialResult', (result: PartialResultMessage) => {
       logger.info('Partial result received', { text: result.text.substring(0, 50) });
       this.emit('partialResult', result);
+      // Display partial result if display service is available
+      this.display?.displayPartialResult(result);
     });
 
     this.wsClient.on('finalResult', (result: FinalResultMessage) => {
       logger.info('Final result received', { text: result.text.substring(0, 50) });
       this.emit('finalResult', result);
+      // Display final result if display service is available
+      this.display?.displayFinalResult(result);
     });
 
     this.wsClient.on('error', (error: Error) => {

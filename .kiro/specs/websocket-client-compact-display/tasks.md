@@ -52,21 +52,21 @@ WebSocketクライアントにCompact表示モードを実装します。この�
   - 無効な値の場合はエラーメッセージを表示して終了
   - _Requirements: 1.1, 1.2, 1.3, 1.4_
 
-- [ ] 3.2 DisplayModeに基づくサービス初期化
+- [x] 3.2 DisplayModeに基づくサービス初期化
   - 表示モードに応じてCompactDisplayインスタンスを生成
   - verboseモードの場合は既存の動作を維持
   - compactモードの場合は新しいCompactDisplayを使用
   - _Requirements: 1.1, 1.2, 1.3_
 
 - [ ] 4. TranscriptionClientの統合
-- [ ] 4.1 CompactDisplayサービスの統合
+- [x] 4.1 CompactDisplayサービスの統合
   - TranscriptionClientのコンストラクタにCompactDisplayを受け取る機能を追加
   - Partialメッセージ受信時にCompactDisplayを呼び出し
   - Finalメッセージ受信時にCompactDisplayを呼び出し
   - 既存のTranscriptionDisplay機能を維持（並行動作）
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 3.1, 3.2, 3.3, 3.4, 3.5_
 
-- [ ] 4.2 Verboseモード互換性の確認
+- [x] 4.2 Verboseモード互換性の確認
   - verboseモード時に既存のJSON形式表示が正常動作すること
   - compactモード時にverboseの動作が実行されないこと
   - 両モードで独立した動作が保証されること

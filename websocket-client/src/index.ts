@@ -141,11 +141,13 @@ const config: TranscriptionClientConfig = {
     silenceDuration: cliConfig.vad?.silenceDuration ?? parseFloat(process.env['VAD_SILENCE_DURATION'] || '10'), // seconds
     forceVoiceAfter: cliConfig.vad?.forceVoiceAfter ?? parseFloat(process.env['VAD_FORCE_VOICE_AFTER'] || '300'), // 5 minutes
   },
+  // Initialize display service based on display mode
+  display: displayMode === 'compact' ? new CompactDisplay() : undefined,
 };
 
 async function main() {
   logger.info('=== WebSocket Real-time Transcription Client ===');
-  logger.info('Configuration', config);
+  logger.info('Configuration', { ...config, display: config.display ? 'CompactDisplay' : 'verbose (console.log)' });
 
   const client = new TranscriptionClient(config);
 
