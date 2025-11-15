@@ -4,14 +4,16 @@
  */
 
 import { TranscriptionClient, TranscriptionClientConfig } from './services/TranscriptionClient';
+import { CompactDisplay } from './services/CompactDisplay';
+import { DisplayMode } from './types/websocket';
 import { logger } from './services/Logger';
 
 /**
  * Parse command line arguments
  */
-function parseArgs(): Partial<TranscriptionClientConfig> {
+function parseArgs(): Partial<TranscriptionClientConfig> & { displayMode?: DisplayMode } {
   const args = process.argv.slice(2);
-  const config: Partial<TranscriptionClientConfig> = {};
+  const config: Partial<TranscriptionClientConfig> & { displayMode?: DisplayMode } = {};
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -65,6 +67,19 @@ function parseArgs(): Partial<TranscriptionClientConfig> {
         config.vad!.forceVoiceAfter = parseFloat(args[++i]!);
         break;
 
+      case '--display':
+        if (i + 1 >= args.length) {
+          console.error(`Error: ${arg} requires a value`);
+          process.exit(1);
+        }
+        const displayValue = args[++i]!;
+        if (displayValue !== 'compact' && displayValue !== 'verbose') {
+          console.error(`Invalid display mode: "${displayValue}". Valid options are: compact, verbose`);
+          process.exit(1);
+        }
+        config.displayMode = displayValue;
+        break;
+
       case '--help':
       case '-h':
         console.log(`
@@ -78,6 +93,7 @@ Options:
   -t, --vad-threshold <dB>            VAD silence threshold in dB (default: -85)
   --vad-silence-duration <seconds>    Silence duration in seconds (default: 10)
   --vad-force-voice-after <seconds>   Force voice detection after N seconds (default: 300)
+  --display <mode>                    Display mode: compact or verbose (default: compact)
   -h, --help                          Show this help message
 
 Examples:
@@ -100,6 +116,9 @@ Examples:
 
 // Parse command line arguments
 const cliConfig = parseArgs();
+
+// Determine display mode (default: compact)
+const displayMode: DisplayMode = cliConfig.displayMode || 'compact';
 
 // Default configuration
 const config: TranscriptionClientConfig = {

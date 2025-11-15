@@ -45,7 +45,7 @@ WebSocketクライアントにCompact表示モードを実装します。この�
   - _Requirements: 4.1, 4.2, 4.3, 6.1, 6.2, 6.3, 6.4_
 
 - [ ] 3. CLI引数解析の拡張
-- [ ] 3.1 --display引数のパース機能を追加
+- [x] 3.1 --display引数のパース機能を追加
   - 既存のCLI引数パーサーに--display引数処理を追加
   - 'compact', 'verbose' の値をバリデーション
   - 引数なしの場合はデフォルトで'compact'を設定
