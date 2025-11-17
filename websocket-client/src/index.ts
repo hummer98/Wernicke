@@ -168,14 +168,10 @@ async function main() {
     logger.info('[Final]', { text: result.text });
   });
 
-  // VAD events for debugging
-  client.on('voiceDetected', (info) => {
-    logger.info('[VAD] Voice detected', info);
-  });
-
-  client.on('silenceDetected', (info) => {
-    logger.debug('[VAD] Silence detected', info);
-  });
+  // VAD events are logged at debug level to reduce noise
+  // client.on('voiceDetected', (info) => {
+  //   logger.info('[VAD] Voice detected', info);
+  // });
 
   client.on('error', (error) => {
     logger.error('[Error]', { error: error instanceof Error ? error.message : String(error) });
