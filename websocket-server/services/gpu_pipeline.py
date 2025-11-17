@@ -99,7 +99,7 @@ class GPUPipeline:
             self.whisper_processor = WhisperProcessor.from_pretrained(model_name)
             self.whisper_model = WhisperForConditionalGeneration.from_pretrained(
                 model_name,
-                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                dtype=torch.float16 if self.device == "cuda" else torch.float32,
                 device_map=self.device
             )
             
@@ -272,6 +272,61 @@ class GPUPipeline:
             # On error, return full audio as single segment to avoid skipping valid audio
             return [{'start': 0, 'end': len(audio_np)}]
 
+    def detect_voice_activity_realtime(self, audio_chunk: bytes) -> Dict[str, Any]:
+        """
+        Real-time voice activity detection for audio chunk (VAD-driven flush)
+
+        Args:
+            audio_chunk: Raw audio bytes (16kHz mono float32)
+
+        Returns:
+            Dict with:
+                - has_speech (bool): True if speech detected in chunk
+                - chunk_duration (float): Chunk duration in seconds
+        """
+        if self.vad_model is None:
+            # VAD disabled - assume all chunks contain speech
+            return {
+                'has_speech': True,
+                'chunk_duration': len(audio_chunk) / (16000 * 4)  # 16kHz, 4 bytes per sample
+            }
+
+        try:
+            # Convert bytes to numpy array
+            audio_np = np.frombuffer(audio_chunk, dtype=np.float32)
+            chunk_duration = len(audio_np) / 16000.0
+
+            # Convert to torch tensor for VAD
+            audio_tensor = torch.from_numpy(audio_np.copy())
+
+            # Get speech timestamps (stricter parameters for real-time detection)
+            speech_timestamps = get_speech_timestamps(
+                audio_tensor,
+                self.vad_model,
+                threshold=0.6,  # Higher threshold to reduce false positives
+                sampling_rate=16000,
+                min_speech_duration_ms=500,  # Longer minimum to filter out noise
+                min_silence_duration_ms=300,  # Longer silence detection
+                return_seconds=False
+            )
+
+            has_speech = len(speech_timestamps) > 0
+
+            logger.debug(f"Real-time VAD: chunk_duration={chunk_duration:.2f}s, has_speech={has_speech}")
+
+            return {
+                'has_speech': has_speech,
+                'chunk_duration': chunk_duration
+            }
+
+        except Exception as e:
+            logger.error(f"Real-time VAD error: {str(e)}", exc_info=True)
+            # On error, assume speech to avoid skipping valid audio
+            return {
+                'has_speech': True,
+                'chunk_duration': len(audio_chunk) / (16000 * 4)
+            }
+
     async def transcribe_audio(
         self,
         audio_data: bytes,
@@ -333,12 +388,17 @@ class GPUPipeline:
             else:
                 input_features = input_features.to(self.device)
 
-            # Generate transcription
+            # Generate transcription with hallucination prevention parameters
             predicted_ids = self.whisper_model.generate(
                 input_features,
                 language="ja",
                 task="transcribe",
-                return_timestamps=True
+                return_timestamps=True,
+                # Hallucination prevention parameters
+                logprob_threshold=-1.0,  # Reject low-confidence results
+                compression_ratio_threshold=2.4,  # Reject repetitive results
+                no_speech_threshold=0.6,  # Higher threshold for silence detection
+                condition_on_previous_text=False  # Prevent feedback loops
             )
 
             # Decode transcription

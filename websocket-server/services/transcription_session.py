@@ -35,8 +35,10 @@ class TranscriptionSession:
     MAX_BUFFER_DURATION = 30  # seconds
     MAX_BUFFER_SIZE = BYTES_PER_SECOND * MAX_BUFFER_DURATION  # 1,920,000 bytes (83% reduction)
 
-    # VAD configuration
-    SILENCE_THRESHOLD = 2.0  # seconds
+    # VAD configuration (VAD-driven flush)
+    SILENCE_THRESHOLD = 2.0  # seconds (speech pause detection)
+    MIN_BUFFER_DURATION = 5.0  # seconds (minimum buffer size before VAD flush)
+    MIN_BUFFER_SIZE = int(BYTES_PER_SECOND * MIN_BUFFER_DURATION)  # 320,000 bytes (5 seconds)
 
     def __init__(self):
         """Initialize transcription session"""
@@ -135,7 +137,8 @@ class TranscriptionSession:
 
         Flush triggers:
         - 30 seconds max duration (MAX_BUFFER_SIZE reached)
-        - 2 seconds silence (SILENCE_THRESHOLD)
+        - 2.0 seconds silence (SILENCE_THRESHOLD) - VAD-driven flush
+          (only if buffer >= 5 seconds MIN_BUFFER_SIZE)
 
         Returns:
             True if should flush, False otherwise
@@ -148,10 +151,18 @@ class TranscriptionSession:
             logger.info(f"Flush trigger: MAX_BUFFER_SIZE reached ({len(self._buffer)} bytes)")
             return True
 
-        # Check silence duration (2 seconds)
+        # Check silence duration (1.5 seconds) - VAD-driven flush
+        # Only trigger if buffer has at least MIN_BUFFER_SIZE (3 seconds)
         if self._silence_duration >= self.SILENCE_THRESHOLD:
-            logger.info(f"Flush trigger: SILENCE_THRESHOLD reached ({self._silence_duration}s)")
-            return True
+            if len(self._buffer) >= self.MIN_BUFFER_SIZE:
+                buffer_duration = len(self._buffer) / self.BYTES_PER_SECOND
+                logger.info(f"Flush trigger: VAD silence detected ({self._silence_duration:.2f}s, buffer={buffer_duration:.1f}s)")
+                return True
+            else:
+                # Buffer too small - ignore silence
+                buffer_duration = len(self._buffer) / self.BYTES_PER_SECOND
+                logger.debug(f"VAD silence ignored: buffer too small ({buffer_duration:.1f}s < {self.MIN_BUFFER_DURATION}s)")
+                return False
 
         return False
     

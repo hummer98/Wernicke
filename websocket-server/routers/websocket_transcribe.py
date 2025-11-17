@@ -164,6 +164,17 @@ async def websocket_endpoint(websocket: WebSocket):
                         "bytes_received": len(audio_data)
                     })
 
+                    # VAD-driven flush: Real-time voice activity detection
+                    if gpu_pipeline:
+                        vad_result = gpu_pipeline.detect_voice_activity_realtime(audio_data)
+
+                        if vad_result['has_speech']:
+                            # Speech detected - reset silence counter
+                            session.reset_silence()
+                        else:
+                            # No speech - accumulate silence duration
+                            session.track_silence(vad_result['chunk_duration'])
+
                     # Check if buffer should be flushed
                     if session.should_flush():
                         logger.info("Buffer flush triggered")
