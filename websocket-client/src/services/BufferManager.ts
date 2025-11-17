@@ -6,6 +6,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { VoiceActivityDetector, VADResult } from './VoiceActivityDetector';
+import { logger } from './Logger';
 
 export interface BufferManagerConfig {
   bufferDuration: number; // seconds
@@ -149,9 +150,10 @@ export class BufferManager {
 
         // Skip buffer if no voice detected
         if (!vadResult.isVoiceDetected) {
-          console.log(
-            `[BufferManager] Skipping silent buffer (level: ${vadResult.averageLevel.toFixed(1)}dB, silence: ${vadResult.silenceDuration.toFixed(1)}s)`
-          );
+          logger.debug('Skipping silent buffer', {
+            level: `${vadResult.averageLevel.toFixed(1)}dB`,
+            silence: `${vadResult.silenceDuration.toFixed(1)}s`,
+          });
 
           // Clear buffer and release memory
           this.buffer = [];
