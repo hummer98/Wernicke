@@ -260,6 +260,12 @@ async def websocket_endpoint(websocket: WebSocket):
                     })
 
                 else:
+                    # Check if this is a disconnect message
+                    if message.get('type') == 'websocket.disconnect':
+                        # Client disconnected
+                        logger.info(f"WebSocket disconnect received: session_id={session_id}")
+                        break
+
                     # Unknown message type
                     logger.warning(f"Unknown message type received: {message.get('type', 'N/A')}, keys: {list(message.keys())}")
 

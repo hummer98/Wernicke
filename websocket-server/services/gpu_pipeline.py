@@ -8,6 +8,7 @@ Requirements: R4.1, R7.1, R7.3, R3.3, R3.1, R5.1, R8.1
 """
 
 import torch
+import torchaudio
 from transformers import WhisperProcessor, WhisperForConditionalGeneration
 import numpy as np
 import logging
@@ -478,9 +479,18 @@ class GPUPipeline:
             audio_np = np.frombuffer(audio_data, dtype=np.float32)
 
             # Resample to 16kHz mono for VAD (same as Whisper input)
-            audio_np = librosa.resample(audio_np, orig_sr=48000, target_sr=16000)
-            if audio_np.ndim > 1:
-                audio_np = audio_np.mean(axis=1)
+            # Convert to torch tensor for torchaudio resampling
+            audio_tensor = torch.from_numpy(audio_np).unsqueeze(0)  # Add channel dimension
+            if audio_tensor.ndim > 1 and audio_tensor.shape[0] > 1:
+                # Convert stereo to mono by averaging channels
+                audio_tensor = audio_tensor.mean(dim=0, keepdim=True)
+
+            # Resample from 48kHz to 16kHz using torchaudio
+            resampler = torchaudio.transforms.Resample(orig_freq=48000, new_freq=16000)
+            audio_tensor = resampler(audio_tensor)
+
+            # Convert back to numpy array
+            audio_np = audio_tensor.squeeze(0).numpy()
 
             # Detect speech segments using VAD
             vad_segments = self._detect_speech_segments(audio_np)
