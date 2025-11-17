@@ -397,8 +397,7 @@ class GPUPipeline:
                 # Hallucination prevention parameters
                 logprob_threshold=-1.0,  # Reject low-confidence results
                 compression_ratio_threshold=2.4,  # Reject repetitive results
-                no_speech_threshold=0.6,  # Higher threshold for silence detection
-                condition_on_previous_text=False  # Prevent feedback loops
+                no_speech_threshold=0.6  # Higher threshold for silence detection
             )
 
             # Decode transcription

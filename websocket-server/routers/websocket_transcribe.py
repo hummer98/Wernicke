@@ -193,6 +193,18 @@ async def websocket_endpoint(websocket: WebSocket):
                                     buffer_start_time=buffer_start_time
                                 )
 
+                                # Check if processing encountered an error
+                                if partial_result.get('error'):
+                                    # Send error to client
+                                    await websocket.send_json({
+                                        "type": "error",
+                                        "code": "TRANSCRIPTION_ERROR",
+                                        "message": partial_result.get('message', 'Unknown error during transcription'),
+                                        "buffer_id": buffer_id
+                                    })
+                                    logger.error(f"Transcription error for buffer_id={buffer_id}: {partial_result.get('message')}")
+                                    continue
+
                                 # Check if result has non-empty text
                                 result_text = partial_result.get('text', '')
 
