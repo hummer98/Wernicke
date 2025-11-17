@@ -186,48 +186,55 @@ async def websocket_endpoint(websocket: WebSocket):
                         # Process partial results (if GPU pipeline is available)
                         if gpu_pipeline:
                             try:
-                                # Execute Whisper once and get both partial result and whisper result
-                                partial_result, whisper_result = await gpu_pipeline.process_partial_and_get_whisper_result(
+                                # Execute Whisper once and get list of progressive partial results and whisper result
+                                partial_results, whisper_result = await gpu_pipeline.process_partial_and_get_whisper_result(
                                     audio_data=buffer_audio,
                                     buffer_id=buffer_id,
                                     buffer_start_time=buffer_start_time
                                 )
 
                                 # Check if processing encountered an error
-                                if partial_result.get('error'):
+                                if len(partial_results) > 0 and partial_results[0].get('error'):
                                     # Send error to client
                                     await websocket.send_json({
                                         "type": "error",
                                         "code": "TRANSCRIPTION_ERROR",
-                                        "message": partial_result.get('message', 'Unknown error during transcription'),
+                                        "message": partial_results[0].get('message', 'Unknown error during transcription'),
                                         "buffer_id": buffer_id
                                     })
-                                    logger.error(f"Transcription error for buffer_id={buffer_id}: {partial_result.get('message')}")
+                                    logger.error(f"Transcription error for buffer_id={buffer_id}: {partial_results[0].get('message')}")
                                     continue
 
-                                # Check if result has non-empty text
-                                result_text = partial_result.get('text', '')
+                                # Send progressive partial results with delay
+                                has_non_empty_result = False
+                                for idx, partial_result in enumerate(partial_results):
+                                    result_text = partial_result.get('text', '')
 
-                                if result_text:
-                                    # Send partial result to client immediately (only if text is not empty)
-                                    await websocket.send_json(partial_result)
-                                    logger.info(f"Partial result sent: buffer_id={buffer_id}, text='{result_text[:100]}...'")
+                                    if result_text:
+                                        has_non_empty_result = True
+                                        # Send partial result to client
+                                        await websocket.send_json(partial_result)
+                                        logger.info(f"Partial result sent ({idx+1}/{len(partial_results)}): buffer_id={buffer_id}, text='{result_text[:100]}...'")
 
-                                    # Start final processing in background (Task 8.2)
-                                    # Reuse Whisper result for Alignment → Diarization → LLM
-                                    if whisper_result is not None:
-                                        asyncio.create_task(
-                                            process_and_send_final_result(
-                                                websocket=websocket,
-                                                gpu_pipeline=gpu_pipeline,
-                                                whisper_result=whisper_result,
-                                                audio_data=buffer_audio,
-                                                buffer_id=buffer_id,
-                                                buffer_start_time=buffer_start_time
-                                            )
+                                        # Add delay between partials for better UX (except for last one)
+                                        if idx < len(partial_results) - 1:
+                                            await asyncio.sleep(0.1)  # 100ms delay
+
+                                # Start final processing in background (Task 8.2)
+                                # Reuse Whisper result for Alignment → Diarization → LLM
+                                if has_non_empty_result and whisper_result is not None:
+                                    asyncio.create_task(
+                                        process_and_send_final_result(
+                                            websocket=websocket,
+                                            gpu_pipeline=gpu_pipeline,
+                                            whisper_result=whisper_result,
+                                            audio_data=buffer_audio,
+                                            buffer_id=buffer_id,
+                                            buffer_start_time=buffer_start_time
                                         )
-                                        logger.info(f"Final processing started in background: buffer_id={buffer_id}")
-                                else:
+                                    )
+                                    logger.info(f"Final processing started in background: buffer_id={buffer_id}")
+                                elif not has_non_empty_result:
                                     # Skip sending empty results (no speech detected by VAD)
                                     logger.info(f"Skipping empty result: buffer_id={buffer_id} (no speech detected)")
 

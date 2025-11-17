@@ -496,8 +496,8 @@ export function createLogger(config?: Partial<LoggerConfig>): winston.Logger {
   }
   
   // File transports (only outside test environment)
-  // - Daily log: ~/logs/client-YYYY-MM-DD.log
-  // - Error log: ~/logs/error.log
+  // - Daily log: websocket-client/logs/client-YYYY-MM-DD.log
+  // - Error log: websocket-client/logs/error.log
 }
 ```
 

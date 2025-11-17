@@ -3,6 +3,23 @@
  * Mac Client Entry Point
  */
 
+// Parse display mode BEFORE importing logger to set environment variable early
+const args = process.argv.slice(2);
+let displayMode: 'compact' | 'verbose' = 'compact';
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === '--display' && i + 1 < args.length) {
+    const value = args[i + 1];
+    if (value === 'compact' || value === 'verbose') {
+      displayMode = value;
+    }
+    break;
+  }
+}
+// Set environment variable before logger import
+if (displayMode === 'compact') {
+  process.env['DISABLE_CONSOLE_LOG'] = 'true';
+}
+
 import { TranscriptionClient, TranscriptionClientConfig } from './services/TranscriptionClient';
 import { CompactDisplay } from './services/CompactDisplay';
 import { DisplayMode } from './types/websocket';
@@ -117,8 +134,8 @@ Examples:
 // Parse command line arguments
 const cliConfig = parseArgs();
 
-// Determine display mode (default: compact)
-const displayMode: DisplayMode = cliConfig.displayMode || 'compact';
+// Use the displayMode determined at the top of the file
+const finalDisplayMode: DisplayMode = cliConfig.displayMode || displayMode;
 
 // Default configuration
 const config: TranscriptionClientConfig = {
@@ -142,7 +159,7 @@ const config: TranscriptionClientConfig = {
     forceVoiceAfter: cliConfig.vad?.forceVoiceAfter ?? parseFloat(process.env['VAD_FORCE_VOICE_AFTER'] || '300'), // 5 minutes
   },
   // Initialize display service based on display mode
-  display: displayMode === 'compact' ? new CompactDisplay() : undefined,
+  display: finalDisplayMode === 'compact' ? new CompactDisplay() : undefined,
 };
 
 async function main() {
@@ -160,13 +177,8 @@ async function main() {
     logger.info('[Event] WebSocket disconnected');
   });
 
-  client.on('partialResult', (result) => {
-    logger.info('[Partial]', { text: result.text });
-  });
-
-  client.on('finalResult', (result) => {
-    logger.info('[Final]', { text: result.text });
-  });
+  // partialResult and finalResult are already logged by TranscriptionClient
+  // No need to log them again here to avoid duplicate logs
 
   // VAD events are logged at debug level to reduce noise
   // client.on('voiceDetected', (info) => {

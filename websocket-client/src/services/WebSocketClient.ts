@@ -329,12 +329,12 @@ export class WebSocketClient extends EventEmitter {
           break;
 
         case 'partial':
-          logger.info('Partial result received', { bufferId: message.buffer_id });
+          logger.info('Partial result received', { bufferId: message.buffer_id, text: message.text });
           this.emit('partialResult', message);
           break;
 
         case 'final':
-          logger.info('Final result received', { bufferId: message.buffer_id });
+          logger.info('Final result received', { bufferId: message.buffer_id, text: message.text });
           this.emit('finalResult', message);
           break;
 

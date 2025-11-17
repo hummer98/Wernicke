@@ -7,7 +7,6 @@
 
 import winston from 'winston';
 import * as path from 'path';
-import * as os from 'os';
 import * as fs from 'fs';
 
 /**
@@ -25,10 +24,13 @@ export interface LoggerConfig {
  * Winstonロガーインスタンスの作成
  */
 export function createLogger(config?: Partial<LoggerConfig>): winston.Logger {
+  // Get project root directory (websocket-client/)
+  const projectRoot = path.resolve(__dirname, '../..');
+
   const defaultConfig: LoggerConfig = {
-    logDir: path.join(os.homedir(), 'logs'),
+    logDir: path.join(projectRoot, 'logs'),
     level: 'info',
-    enableConsole: true,
+    enableConsole: process.env['DISABLE_CONSOLE_LOG'] !== 'true',
   };
 
   const finalConfig = { ...defaultConfig, ...config };

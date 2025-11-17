@@ -1,11 +1,13 @@
 # Requirements Document
 
 ## Introduction
+
 WebSocketクライアントに新しいCompact表示モードを追加します。このモードは、リアルタイム音声文字起こしの結果をシンプルで読みやすいテキスト形式で表示し、ユーザーが会話の流れを自然に追えるようにします。デフォルトの表示モードとして動作し、必要に応じて詳細なverboseモードに切り替えることができます。
 
 ## Requirements
 
 ### Requirement 1: 表示モード切り替え機能
+
 **Objective:** 開発者として、コマンドライン引数で表示モードを選択できるようにしたい。これにより、用途に応じて最適な表示形式を使用できる。
 
 #### Acceptance Criteria
@@ -16,6 +18,7 @@ WebSocketクライアントに新しいCompact表示モードを追加します�
 4. WHEN 無効な `--display` 値が指定される THEN クライアントはエラーメッセージを表示して終了する
 
 ### Requirement 2: Partialメッセージの逐次表示
+
 **Objective:** ユーザーとして、音声認識の途中結果（Partial）をリアルタイムで確認したい。これにより、認識が進行中であることを把握でき、最終結果を待つ間も内容を追うことができる。
 
 #### Acceptance Criteria
@@ -27,6 +30,7 @@ WebSocketクライアントに新しいCompact表示モードを追加します�
 5. WHERE Compact表示モードが有効である THE クライアントはPartial行を常に画面の最終行に表示する
 
 ### Requirement 3: Finalメッセージの確定表示
+
 **Objective:** ユーザーとして、音声認識の確定結果（Final）を明確に区別して記録したい。これにより、認識が完了した正確なテキストを履歴として保持できる。
 
 #### Acceptance Criteria
@@ -38,6 +42,7 @@ WebSocketクライアントに新しいCompact表示モードを追加します�
 5. WHEN 複数のFinalメッセージを受信する THEN クライアントは全てのFinal結果を履歴として保持し、スクロール可能な状態で表示する
 
 ### Requirement 4: 話者情報の表示
+
 **Objective:** ユーザーとして、誰が話しているかを識別したい。これにより、複数話者の会話を理解しやすくする。
 
 #### Acceptance Criteria
@@ -47,6 +52,7 @@ WebSocketクライアントに新しいCompact表示モードを追加します�
 3. WHEN メッセージに話者情報が含まれない THEN クライアントは話者部分を省略する
 
 ### Requirement 5: Verboseモードの互換性維持
+
 **Objective:** 開発者として、既存のJSON形式表示機能を維持したい。これにより、デバッグや詳細ログ確認が必要な場合に利用できる。
 
 #### Acceptance Criteria
@@ -56,6 +62,7 @@ WebSocketクライアントに新しいCompact表示モードを追加します�
 3. WHERE `--display=verbose` モードが有効である THE クライアントはCompact表示の動作を実行しない
 
 ### Requirement 6: ターミナル表示の制御
+
 **Objective:** 開発者として、ターミナル上で適切なカーソル制御を行いたい。これにより、スムーズな逐次更新とクリーンな表示を実現できる。
 
 #### Acceptance Criteria

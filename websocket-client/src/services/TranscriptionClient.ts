@@ -72,14 +72,12 @@ export class TranscriptionClient extends EventEmitter {
     });
 
     this.wsClient.on('partialResult', (result: PartialResultMessage) => {
-      logger.info('Partial result received', { text: result.text.substring(0, 50) });
       this.emit('partialResult', result);
       // Display partial result if display service is available
       this.display?.displayPartialResult(result);
     });
 
     this.wsClient.on('finalResult', (result: FinalResultMessage) => {
-      logger.info('Final result received', { text: result.text.substring(0, 50) });
       this.emit('finalResult', result);
       // Display final result if display service is available
       this.display?.displayFinalResult(result);

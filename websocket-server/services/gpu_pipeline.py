@@ -446,11 +446,11 @@ class GPUPipeline:
         audio_data: bytes,
         buffer_id: str,
         buffer_start_time: float
-    ) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """
-        Process audio: Execute Whisper once and return both partial result and whisper result
+        Process audio: Execute Whisper once and return list of progressive partial results and whisper result
 
-        Task 4.1: Partial Results Processing Pipeline
+        Task 4.1: Partial Results Processing Pipeline (Modified for VAD-based progressive partials)
 
         Args:
             audio_data: Raw audio bytes (48kHz, stereo, float32)
@@ -458,7 +458,8 @@ class GPUPipeline:
             buffer_start_time: Buffer start timestamp
 
         Returns:
-            Tuple of (partial_result, whisper_result) - whisper_result is used for final processing
+            Tuple of (partial_results_list, whisper_result) - whisper_result is used for final processing
+            partial_results_list contains progressive partial results based on VAD segments
         """
         start_time = time.time()
 
@@ -467,41 +468,82 @@ class GPUPipeline:
             whisper_result = await self.transcribe_audio(audio_data, buffer_start_time)
 
             if 'error' in whisper_result:
-                return whisper_result, None
+                return [whisper_result], None
 
             # Extract segments
             segments = whisper_result.get('segments', [])
             text = whisper_result.get('text', '')
 
-            # Calculate timestamp range
-            if segments:
-                timestamp_range = {
-                    'start': min(seg['start'] for seg in segments),
-                    'end': max(seg['end'] for seg in segments)
-                }
+            # Convert audio to numpy array for VAD processing
+            audio_np = np.frombuffer(audio_data, dtype=np.float32)
+
+            # Resample to 16kHz mono for VAD (same as Whisper input)
+            audio_np = librosa.resample(audio_np, orig_sr=48000, target_sr=16000)
+            if audio_np.ndim > 1:
+                audio_np = audio_np.mean(axis=1)
+
+            # Detect speech segments using VAD
+            vad_segments = self._detect_speech_segments(audio_np)
+
+            # Create progressive partial results based on VAD segments
+            partial_results = []
+            cumulative_text = ""
+            cumulative_segments = []
+
+            if len(vad_segments) == 0:
+                # No speech detected, return single empty partial
+                partial_results.append({
+                    'type': 'partial',
+                    'buffer_id': buffer_id,
+                    'text': '',
+                    'segments': [],
+                    'timestamp_range': {'start': 0.0, 'end': 0.0},
+                    'latency_ms': (time.time() - start_time) * 1000
+                })
             else:
-                timestamp_range = {
-                    'start': 0.0,
-                    'end': 0.0
-                }
+                # Split Whisper segments by VAD segments to create progressive partials
+                for vad_idx, vad_seg in enumerate(vad_segments):
+                    vad_start_sec = vad_seg['start'] / 16000.0
+                    vad_end_sec = vad_seg['end'] / 16000.0
 
-            # Calculate latency
-            latency_ms = (time.time() - start_time) * 1000
+                    # Find Whisper segments that overlap with this VAD segment
+                    matching_segments = [
+                        seg for seg in segments
+                        if seg['start'] < vad_end_sec and seg['end'] > vad_start_sec
+                    ]
 
-            logger.info(f"Partial result generated: buffer_id={buffer_id}, latency={latency_ms:.1f}ms")
+                    # Add matching segments to cumulative list
+                    for seg in matching_segments:
+                        if seg not in cumulative_segments:
+                            cumulative_segments.append(seg)
+                            cumulative_text += seg['text']
 
-            # Create partial result
-            partial_result = {
-                'type': 'partial',
-                'buffer_id': buffer_id,
-                'text': text,
-                'segments': segments,
-                'timestamp_range': timestamp_range,
-                'latency_ms': latency_ms
-            }
+                    # Create progressive partial result (cumulative model)
+                    if cumulative_segments:
+                        timestamp_range = {
+                            'start': min(seg['start'] for seg in cumulative_segments),
+                            'end': max(seg['end'] for seg in cumulative_segments)
+                        }
+                    else:
+                        timestamp_range = {'start': 0.0, 'end': 0.0}
 
-            # Return both partial result and whisper result for final processing
-            return partial_result, whisper_result
+                    partial_results.append({
+                        'type': 'partial',
+                        'buffer_id': buffer_id,
+                        'text': cumulative_text.strip(),
+                        'segments': cumulative_segments.copy(),
+                        'timestamp_range': timestamp_range,
+                        'latency_ms': (time.time() - start_time) * 1000,
+                        'vad_segment_index': vad_idx + 1,
+                        'total_vad_segments': len(vad_segments)
+                    })
+
+            # Calculate total latency
+            total_latency_ms = (time.time() - start_time) * 1000
+            logger.info(f"Progressive partial results generated: buffer_id={buffer_id}, vad_segments={len(vad_segments)}, partials={len(partial_results)}, latency={total_latency_ms:.1f}ms")
+
+            # Return list of partial results and whisper result for final processing
+            return partial_results, whisper_result
 
         except Exception as e:
             logger.error(f"Partial processing error: {str(e)}", exc_info=True)
@@ -509,7 +551,7 @@ class GPUPipeline:
                 'error': True,
                 'message': str(e)
             }
-            return error_result, None
+            return [error_result], None
 
     def cleanup(self):
         """
