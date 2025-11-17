@@ -41,8 +41,15 @@ export class BufferManager {
     this.config = config;
 
     // Calculate buffer capacity (duration * sampleRate * channels * bytes per sample)
-    // s16le = 16-bit = 2 bytes per sample
-    const bytesPerSample = 2;
+    // Determine bytes per sample based on format
+    let bytesPerSample: number;
+    if (config.format === 'f32le') {
+      bytesPerSample = 4; // 32-bit float = 4 bytes
+    } else if (config.format === 's16le') {
+      bytesPerSample = 2; // 16-bit = 2 bytes
+    } else {
+      throw new Error(`Unsupported audio format: ${config.format}`);
+    }
     this.bufferCapacity =
       config.bufferDuration * config.sampleRate * config.channels * bytesPerSample;
 

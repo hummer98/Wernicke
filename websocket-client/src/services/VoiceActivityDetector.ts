@@ -55,8 +55,8 @@ export class VoiceActivityDetector {
     // Calculate audio level (RMS in dB)
     const averageLevel = this.calculateRMSLevel(buffer);
 
-    // Calculate buffer duration
-    const bufferDuration = buffer.length / (this.config.sampleRate * this.config.channels * 2);
+    // Calculate buffer duration (f32le = 4 bytes per sample)
+    const bufferDuration = buffer.length / (this.config.sampleRate * this.config.channels * 4);
 
     // Update statistics
     this.statistics.totalAnalyzedDuration += bufferDuration;
@@ -90,7 +90,8 @@ export class VoiceActivityDetector {
    * Calculate RMS (Root Mean Square) level in dB
    */
   private calculateRMSLevel(buffer: Buffer): number {
-    const numSamples = buffer.length / 2; // 16-bit samples
+    // f32le = 4 bytes per sample (32-bit float)
+    const numSamples = buffer.length / 4;
 
     if (numSamples === 0) {
       return -Infinity;
@@ -98,10 +99,10 @@ export class VoiceActivityDetector {
 
     let sumSquares = 0;
     for (let i = 0; i < numSamples; i++) {
-      const sample = buffer.readInt16LE(i * 2);
-      // Normalize to [-1, 1]
-      const normalized = sample / 32768.0;
-      sumSquares += normalized * normalized;
+      // Read 32-bit float (little-endian)
+      const sample = buffer.readFloatLE(i * 4);
+      // sample is already normalized to [-1, 1] for f32le
+      sumSquares += sample * sample;
     }
 
     const rms = Math.sqrt(sumSquares / numSamples);
