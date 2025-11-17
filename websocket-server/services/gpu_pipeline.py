@@ -395,6 +395,7 @@ class GPUPipeline:
                 task="transcribe",
                 return_timestamps=True,
                 # Hallucination prevention parameters
+                temperature=0.0,  # Use greedy decoding (required for logprob_threshold)
                 logprob_threshold=-1.0,  # Reject low-confidence results
                 compression_ratio_threshold=2.4,  # Reject repetitive results
                 no_speech_threshold=0.6  # Higher threshold for silence detection
