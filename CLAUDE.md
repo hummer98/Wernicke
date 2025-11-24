@@ -16,7 +16,8 @@ Kiro-style Spec Driven Development implementation using claude code slash comman
 
 ### Active Specifications
 
-- **continuous-audio-transcription**: 24時間連続音声文字起こしシステム (BlackHole + Whisper.cpp)
+- **websocket-realtime-transcription**: WebSocketベースのリアルタイム音声文字起こしシステム (Mac Client + Windows CUDA Server + LLM補正)
+- **websocket-client-compact-display**: WebSocketクライアントのCompact表示モード（テキストのみ、Partial逐次更新、Final確定表示）
 
 進捗確認: `/kiro:spec-status [feature-name]`
 

@@ -1,0 +1,278 @@
+================================================================================
+WEBSOCKET CLIENT ARCHITECTURE ANALYSIS - SUMMARY
+================================================================================
+
+Analysis Date: 2025-11-16
+Project: Wernicke
+Component: WebSocket Client Real-time Transcription (Mac Client)
+Purpose: Inform design of Compact Display Mode feature
+
+================================================================================
+ANALYSIS DELIVERABLES
+================================================================================
+
+1. WEBSOCKET_CLIENT_ARCHITECTURE_ANALYSIS.md (737 lines)
+   - Comprehensive 12-section analysis
+   - Complete code walkthroughs with line numbers
+   - Message structures and TypeScript interfaces
+   - Architecture patterns and design principles
+   - Extension points for compact display implementation
+
+2. COMPACT_DISPLAY_QUICK_REFERENCE.md
+   - Quick implementation checklist
+   - Required code changes (6 sections)
+   - Message flow diagrams
+   - Testing checklist
+   - Implementation order
+
+3. WEBSOCKET_CLIENT_COMPONENT_DIAGRAM.md
+   - Visual ASCII diagrams
+   - Service component details
+   - Message processing pipeline
+   - Data structure examples
+   - Configuration cascade
+
+================================================================================
+KEY FINDINGS
+================================================================================
+
+ARCHITECTURE PATTERN:
+- Event-driven with layered services
+- Each service extends EventEmitter
+- Clear separation of concerns
+- Configuration-driven behavior
+
+MAIN COMPONENTS:
+1. WebSocketClient - Network I/O and message parsing (372 lines)
+2. AudioCaptureService - FFmpeg-based audio capture (325 lines)
+3. VoiceActivityDetector - Simple level-based analysis (stateless)
+4. TranscriptionDisplay - File-based output (235 lines, current)
+5. TranscriptionClient - Orchestration and bridging (246 lines)
+6. Logger - Winston-based structured logging
+
+MESSAGE TYPES (All JSON):
+- connection_established: { type, message, session_id }
+- partial: { type, buffer_id, text, segments, timestamp_range, latency_ms }
+- final: { type, buffer_id, text, segments, timestamp_range, latency_ms }
+- error: { type, code, message, timestamp }
+
+TRANSCRIPTION SEGMENT:
+- start, end (seconds), text, speaker (optional), corrected (boolean)
+
+CLI ARGUMENT PATTERN:
+- Manual parser with switch/case (no external library)
+- Supports long form (--option) and short form (-o)
+- Environment variable fallback
+- Default value cascade: CLI > ENV > defaults
+
+DEPENDENCIES:
+- ws@8.16.0 (WebSocket)
+- winston@3.18.3 (Logging)
+- child_process (FFmpeg)
+- Standard Node.js: events, fs, path, os
+
+================================================================================
+CURRENT DISPLAY BEHAVIOR (TranscriptionDisplay)
+================================================================================
+
+Output Target: Files only (no console)
+Partial Format: [HH:MM] [Speaker X] (partial) text
+Final Format:   [HH:MM] [Speaker X] text
+Partial Behavior: Append to live.txt file
+Final Behavior:   Replace partial line or append; record to daily log
+File Locations:   ~/transcriptions/live.txt, ~/transcriptions/logs/YYYY-MM-DD.log
+Log Rotation:     Daily (automatic based on date)
+
+================================================================================
+REQUIRED IMPLEMENTATION FOR COMPACT DISPLAY MODE
+================================================================================
+
+NEW FILES:
+1. src/services/CompactDisplay.ts (~150-200 lines)
+2. src/services/CompactDisplay.test.ts (test suite)
+
+MODIFIED FILES:
+1. src/types/websocket.ts - Add DisplayMode enum
+2. src/index.ts - Add --display CLI argument parser
+3. src/services/TranscriptionClient.ts - Accept display config, instantiate service
+4. src/services/TranscriptionClient.test.ts - Update tests
+
+COMPACT DISPLAY BEHAVIOR:
+Output Target: Console (stdout) only
+Partial Format: [Now][Speaker X] text (or [Now] text)
+Final Format:   [HH:MM:SS][Speaker X] text
+Partial Update: In-place with \r (carriage return) and \x1b[K (clear to EOL)
+Final Display:  New line with timestamp, prompt for next partial with [Now]
+History:        Terminal scrollback only (no file persistence)
+Speaker:        Extracted from segments[0]?.speaker
+
+CONSOLE CONTROL SEQUENCES:
+- \r = Carriage return (move to line start)
+- \x1b[K = Clear to end of line (ANSI escape)
+- \x1b[1A = Move cursor up one line
+- \n = Newline
+
+USAGE EXAMPLES:
+- Default: npm run dev (uses Compact mode)
+- Verbose: npm run dev -- --display=verbose (uses existing TranscriptionDisplay)
+- Compact explicit: npm run dev -- --display=compact
+
+================================================================================
+MESSAGE FLOW FOR COMPACT DISPLAY
+================================================================================
+
+1. WebSocketClient receives message JSON
+2. parseMessage() → switch on type
+3. emit 'partialResult' or 'finalResult'
+4. TranscriptionClient.setupEventHandlers() listens
+5. Re-emit to application
+6. Forward to display service (CompactDisplay)
+7. displayPartialResult() or displayFinalResult()
+8. Output to console with appropriate formatting
+
+PARTIAL EXAMPLE:
+Input:  { type: 'partial', text: 'こんにちは', segments: [{ speaker: 'Speaker 1' }] }
+Output: process.stdout.write('\r\x1b[K[Now][Speaker 1] こんにちは')
+
+FINAL EXAMPLE:
+Input:  { type: 'final', text: 'こんにちは、元気ですか', segments: [{ speaker: 'Speaker 1' }] }
+Output: console.log('\n[12:34:56][Speaker 1] こんにちは、元気ですか')
+        console.log('[Now]') // Or embedded in prompt
+
+================================================================================
+TESTING STRATEGY
+================================================================================
+
+UNIT TESTS NEEDED:
+- Partial message displays with [Now] prefix
+- Final message displays with timestamp
+- Speaker extraction (segments[0]?.speaker)
+- Carriage return/clear sequence formatting
+- Multiple partials overwrite correctly
+- Multiple finals create scrollback history
+- Empty text handling
+
+INTEGRATION TESTS:
+- CLI argument parsing (--display=compact, --display=verbose)
+- Invalid display mode error handling
+- Default mode (Compact) when no argument
+- Full message flow from WebSocket to console
+
+MOCK TARGETS:
+- process.stdout.write() - Verify ANSI sequences
+- console.log() - Verify output lines
+- WebSocket messages - Inject partial/final
+
+================================================================================
+ARCHITECTURAL PATTERNS TO FOLLOW
+================================================================================
+
+1. EVENTEMITTER PATTERN
+   - Services extend EventEmitter
+   - Emit typed events with data
+   - Listeners re-emit or handle
+
+2. CONFIGURATION PATTERN
+   - Config object in constructor
+   - Immutable (copied in constructor)
+   - Getter methods for access
+   - Three-level cascade: CLI > ENV > defaults
+
+3. STATISTICS PATTERN
+   - Track metrics in interfaces
+   - getStatistics() method returns copy
+   - Emit statistics in events
+
+4. ERROR HANDLING PATTERN
+   - Specific error types (AudioCaptureError)
+   - Detailed error messages with troubleshooting
+   - Emit 'error' and 'permanentError' events
+   - Logger integration for structured logging
+
+5. TIMESTAMP EXTRACTION
+   - Extract speaker: segments[0]?.speaker ?? null
+   - Format time: padStart(2, '0')
+   - Use new Date() for current time
+
+================================================================================
+FILE LOCATIONS (ABSOLUTE PATHS)
+================================================================================
+
+Core Implementation:
+/Users/yamamoto/git/Wernicke/websocket-client/src/index.ts
+/Users/yamamoto/git/Wernicke/websocket-client/src/services/WebSocketClient.ts
+/Users/yamamoto/git/Wernicke/websocket-client/src/services/TranscriptionClient.ts
+/Users/yamamoto/git/Wernicke/websocket-client/src/services/AudioCaptureService.ts
+/Users/yamamoto/git/Wernicke/websocket-client/src/services/VoiceActivityDetector.ts
+/Users/yamamoto/git/Wernicke/websocket-client/src/services/TranscriptionDisplay.ts
+/Users/yamamoto/git/Wernicke/websocket-client/src/services/Logger.ts
+
+Types:
+/Users/yamamoto/git/Wernicke/websocket-client/src/types/websocket.ts
+/Users/yamamoto/git/Wernicke/websocket-client/src/types/errors.ts
+
+Tests:
+/Users/yamamoto/git/Wernicke/websocket-client/src/services/*.test.ts
+
+Package:
+/Users/yamamoto/git/Wernicke/websocket-client/package.json
+/Users/yamamoto/git/Wernicke/websocket-client/tsconfig.json
+
+Documentation:
+/Users/yamamoto/git/Wernicke/docs/WEBSOCKET_CLIENT_ARCHITECTURE_ANALYSIS.md
+/Users/yamamoto/git/Wernicke/docs/COMPACT_DISPLAY_QUICK_REFERENCE.md
+/Users/yamamoto/git/Wernicke/docs/WEBSOCKET_CLIENT_COMPONENT_DIAGRAM.md
+
+Specifications:
+/Users/yamamoto/git/Wernicke/.kiro/specs/websocket-client-compact-display/requirements.md
+
+================================================================================
+NEXT STEPS FOR IMPLEMENTATION
+================================================================================
+
+1. Review analysis documents (3 docs above)
+2. Create CompactDisplay service skeleton
+3. Add DisplayMode enum to types
+4. Update CLI parser with --display argument
+5. Implement displayPartialResult() with \r control
+6. Implement displayFinalResult() with newline and timestamp
+7. Update TranscriptionClient constructor to instantiate correct service
+8. Write unit tests for CompactDisplay
+9. Integration test with real WebSocket messages
+10. Verify console output formatting and behavior
+
+================================================================================
+COMPLIANCE WITH REQUIREMENTS
+================================================================================
+
+Requirement 1: Display Mode Selection
+- Solution: Add --display CLI argument (compact|verbose)
+- Default: compact (as specified)
+- Error handling: Invalid values show error and exit
+
+Requirement 2: Partial Message Display
+- Solution: [Now][Speaker X] text format
+- Update: Use \r\x1b[K for in-place updates
+- Extraction: segments[0]?.speaker for speaker info
+
+Requirement 3: Final Message Display
+- Solution: [HH:MM:SS][Speaker X] text format
+- Clear: Newline clears partial line
+- History: Terminal scrollback preserves
+
+Requirement 4: Speaker Information
+- Solution: Extract from segments[0]?.speaker
+- Fallback: Omit speaker part if not present
+- Format: [Speaker X] in both Partial and Final
+
+Requirement 5: Verbose Mode Compatibility
+- Solution: Keep TranscriptionDisplay unchanged
+- Selection: --display=verbose uses existing service
+- Behavior: Full JSON output maintained
+
+Requirement 6: Terminal Control
+- Solution: ANSI escape sequences (\r, \x1b[K, etc)
+- Wordwrap: Natural terminal behavior preserved
+- TTY Detection: (Optional enhancement)
+
+================================================================================

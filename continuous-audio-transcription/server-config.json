@@ -1,9 +1,0 @@
-{
-  "host": "0.0.0.0",
-  "port": 8000,
-  "model": "medium",
-  "language": "ja",
-  "compute_type": "float16",
-  "enable_diarization": false,
-  "hf_token": ""
-}
